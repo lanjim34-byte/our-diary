@@ -18,6 +18,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { hasSupabaseEnv, supabase } from "./supabaseClient";
 import { defaultUserColor, getUserColor, stableColorKey, userColors, type UserColorKey } from "./constants/userColors";
+import { getWeatherOption, weatherOptions, type WeatherKey } from "./constants/weatherOptions";
 
 type Status = "开心" | "普通" | "有点累" | "卡住了" | "想聊天" | "需要安静";
 type Tab = "feed" | "write" | "friends" | "week";
@@ -47,9 +48,10 @@ type Member = {
 type Diary = {
   id: string;
   authorId: string;
-  time: string;
   text: string;
   status?: Status | null;
+  diaryDate: string;
+  weather?: string | null;
   responses: { by: string; text: string; colorKey?: string | null }[];
   comments: { by: string; text: string; time: string; colorKey?: string | null }[];
   followUps: { by: string; text: string; time: string }[];
@@ -175,8 +177,9 @@ function App() {
 
       const { data: entryRows, error: entriesError } = await supabase
         .from("diary_entries")
-        .select("id,notebook_id,author_id,content,mood,created_at,updated_at")
+        .select("id,notebook_id,author_id,content,mood,diary_date,weather,created_at,updated_at")
         .eq("notebook_id", notebook.id)
+        .order("diary_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
       if (entriesError) throw entriesError;
 
@@ -193,23 +196,24 @@ function App() {
       const nextDiaries: Diary[] = entries.map((entry: any) => ({
         id: entry.id,
         authorId: entry.author_id,
-        time: formatTime(entry.created_at),
         text: entry.content,
         status: isStatus(entry.mood) ? entry.mood : null,
+        diaryDate: entry.diary_date || localDateKey(new Date(entry.created_at)),
+        weather: entry.weather,
         createdAt: entry.created_at,
         responses: stamps
           .filter((stamp: any) => stamp.diary_id === entry.id)
           .map((stamp: any) => ({ by: profilesById.get(stamp.author_id)?.display_name ?? "朋友", text: stamp.stamp_type, colorKey: profilesById.get(stamp.author_id)?.color_key })),
         comments: paperNotes
           .filter((note: any) => note.diary_id === entry.id)
-          .map((note: any) => ({ by: profilesById.get(note.author_id)?.display_name ?? "朋友", text: note.content, time: formatTime(note.created_at), colorKey: profilesById.get(note.author_id)?.color_key })),
+          .map((note: any) => ({ by: profilesById.get(note.author_id)?.display_name ?? "朋友", text: note.content, time: formatNoteTime(note.created_at), colorKey: profilesById.get(note.author_id)?.color_key })),
         followUps: followups
           .filter((followup: any) => followup.diary_id === entry.id)
-          .map((followup: any) => ({ by: profilesById.get(followup.author_id)?.display_name ?? "朋友", text: followup.content, time: formatTime(followup.created_at) })),
+          .map((followup: any) => ({ by: profilesById.get(followup.author_id)?.display_name ?? "朋友", text: followup.content, time: formatNoteTime(followup.created_at) })),
         highlights: highlights
           .filter((highlight: any) => highlight.diary_id === entry.id)
           .map((highlight: any) => ({ id: highlight.id, start: highlight.start_index, end: highlight.end_index, colorKey: profilesById.get(highlight.author_id)?.color_key })),
-      }));
+      })).sort(compareDiaries);
 
       setDiaries(nextDiaries);
     } catch (loadError) {
@@ -270,13 +274,15 @@ function App() {
     }
   }
 
-  async function addDiary(text: string, mood: Status | null) {
+  async function addDiary(text: string, mood: Status | null, diaryDate: string, weather: WeatherKey | null) {
     if (!supabase || !activeNotebook || !session?.user) return;
     const { error: insertError } = await supabase.from("diary_entries").insert({
       notebook_id: activeNotebook.id,
       author_id: session.user.id,
       content: text,
       mood,
+      diary_date: diaryDate,
+      weather,
     });
     if (insertError) {
       setError(errorMessage(insertError));
@@ -586,13 +592,22 @@ function DiaryEntry({
 
   return (
     <article className={`diary-entry ${expanded ? "is-expanded" : ""}`} style={personStyle(author.profile)}>
+      <div className="loose-leaf-holes" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
+
       <div className="diary-head">
         <button className="person-link" onClick={onPerson}>
           <strong>{author.profile.display_name}</strong>
-          <small>{diary.time} 写下</small>
         </button>
-        {diary.status && <span className={`status ${statusClass(diary.status)}`}>今天像：{diary.status}</span>}
+        {diary.status && <span className={`status ${statusClass(diary.status)}`}>那天像：{diary.status}</span>}
       </div>
+
+      <DiaryPageMeta diaryDate={diary.diaryDate} weather={diary.weather} />
 
       <div className="diary-body">
         <p className="diary-text" ref={textRef} onMouseUp={handleTextSelection} onKeyUp={handleTextSelection}>
@@ -919,16 +934,20 @@ function ColorPicker({ selected, onSelect }: { selected: UserColorKey; onSelect:
   );
 }
 
-function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null) => void }) {
+function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null, diaryDate: string, weather: WeatherKey | null) => void }) {
   const [text, setText] = useState("");
   const [status, setStatus] = useState<Status | null>(null);
+  const [diaryDate, setDiaryDate] = useState(() => localDateKey(new Date()));
+  const [weather, setWeather] = useState<WeatherKey | null>(null);
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (!text.trim()) return;
-    onSubmit(text.trim(), status);
+    if (!text.trim() || !diaryDate) return;
+    onSubmit(text.trim(), status, diaryDate, weather);
     setText("");
     setStatus(null);
+    setDiaryDate(localDateKey(new Date()));
+    setWeather(null);
   }
 
   return (
@@ -943,8 +962,35 @@ function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null)
         ))}
       </div>
       <form onSubmit={submit} className="write-form">
+        <div className="diary-fields">
+          <label className="diary-date-field">
+            <span>Date:</span>
+            <input type="date" value={diaryDate} onChange={(event) => setDiaryDate(event.target.value)} required />
+            <small>这页写在哪一天</small>
+          </label>
+          <fieldset className="weather-field">
+            <legend>Weather:</legend>
+            <div className="weather-options">
+              {weatherOptions.map((option) => {
+                const Icon = option.icon;
+                return (
+                  <button
+                    type="button"
+                    key={option.key}
+                    className={weather === option.key ? "selected" : ""}
+                    aria-pressed={weather === option.key}
+                    onClick={() => setWeather(weather === option.key ? null : option.key)}
+                  >
+                    <Icon size={16} />
+                    <span>{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+        </div>
         <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="有什么不值得专门发消息，但想让他们知道？" />
-        <p className="writing-hint">今天的你大概是什么天气？可以不选。</p>
+        <p className="writing-hint">那一天的你大概是什么状态？可以不选。</p>
         <div className="status-grid">
           {statusOptions.map((option) => (
             <button type="button" key={option} className={status === option ? "selected" : ""} onClick={() => setStatus(status === option ? null : option)}>
@@ -1011,6 +1057,27 @@ function StampTrail({ stamps }: { stamps: { by: string; text: string; colorKey?:
           </span>
         );
       })}
+    </div>
+  );
+}
+
+function DiaryPageMeta({ diaryDate, weather }: { diaryDate: string; weather?: string | null }) {
+  const weatherOption = getWeatherOption(weather);
+  const WeatherIcon = weatherOption?.icon;
+
+  return (
+    <div className="diary-page-meta">
+      <p>
+        <span className="diary-meta-label">Date:</span>
+        <span className="diary-meta-value">{formatDiaryDate(diaryDate)}</span>
+      </p>
+      {weatherOption && WeatherIcon && (
+        <p>
+          <span className="diary-meta-label">Weather:</span>
+          <span className="diary-meta-value weather-value">{weatherOption.label}</span>
+          <WeatherIcon className="weather-icon" size={15} strokeWidth={1.7} aria-hidden="true" />
+        </p>
+      )}
     </div>
   );
 }
@@ -1187,23 +1254,54 @@ function hexToRgb(hex: string) {
 }
 
 function groupDiaries(diaries: Diary[]) {
-  const today = new Date().toDateString();
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toDateString();
-  return [
-    { label: "今天", items: diaries.filter((diary) => new Date(diary.createdAt).toDateString() === today) },
-    { label: "昨天", items: diaries.filter((diary) => new Date(diary.createdAt).toDateString() === yesterday) },
-    { label: "这周早些时候", items: diaries.filter((diary) => ![today, yesterday].includes(new Date(diary.createdAt).toDateString())) },
-  ].filter((group) => group.items.length > 0);
+  const today = startOfLocalDay(new Date());
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const groups = new Map<string, Diary[]>();
+
+  [...diaries].sort(compareDiaries).forEach((diary) => {
+    const date = parseDiaryDate(diary.diaryDate);
+    let label = formatDiaryDate(diary.diaryDate);
+    if (date.getTime() === today.getTime()) label = "今天";
+    else if (date.getTime() === yesterday.getTime()) label = "昨天";
+    else if (date >= weekStart && date < yesterday) label = "这周早些时候";
+    groups.set(label, [...(groups.get(label) ?? []), diary]);
+  });
+
+  return Array.from(groups, ([label, items]) => ({ label, items }));
 }
 
-function formatTime(value: string) {
+function compareDiaries(a: Diary, b: Diary) {
+  const byDiaryDate = b.diaryDate.localeCompare(a.diaryDate);
+  return byDiaryDate || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+}
+
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDiaryDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function formatDiaryDate(value: string) {
+  const date = parseDiaryDate(value);
+  return [String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0"), date.getFullYear()].join("/");
+}
+
+function formatNoteTime(value: string) {
   const date = new Date(value);
-  const today = new Date().toDateString();
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toDateString();
-  const time = date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
-  if (date.toDateString() === today) return `今天 ${time}`;
-  if (date.toDateString() === yesterday) return `昨天 ${time}`;
-  return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" }) + ` ${time}`;
+  return date.toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function statusClass(status: Status) {
