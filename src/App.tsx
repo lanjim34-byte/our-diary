@@ -384,7 +384,7 @@ function App() {
   const groupedDiaries = groupDiaries(diaries);
 
   return (
-    <div className="app">
+    <div className="app" style={notebookBackgroundStyle(members)}>
       <main className="phone-shell">
         <header className="topbar">
           <div>
@@ -1137,8 +1137,52 @@ function colorVars(color = defaultUserColor, prefix = "person") {
   return {
     [`--${prefix}-base`]: color.base,
     [`--${prefix}-paper`]: color.paper,
+    [`--${prefix}-paper-soft`]: color.paperSoft,
     [`--${prefix}-light`]: color.light,
+    [`--${prefix}-ambient`]: color.ambient,
     [`--${prefix}-highlight`]: color.highlight,
+  };
+}
+
+const ambientPositions = [
+  "12% 10%",
+  "82% 12%",
+  "24% 86%",
+  "78% 78%",
+  "48% 8%",
+  "8% 58%",
+  "92% 48%",
+  "52% 92%",
+];
+
+function notebookBackgroundStyle(members: Member[]) {
+  if (!members.length) return undefined;
+  const colors = members.map((member) => getUserColor(member.profile.color_key));
+  const opacity = Math.max(0.04, Math.min(0.1, 0.16 / colors.length));
+  const washes = colors.map((color, index) => {
+    const rgb = hexToRgb(color.ambient);
+    const position = ambientPositions[index % ambientPositions.length];
+    const radius = 34 + (index % 4) * 4;
+    return `radial-gradient(circle at ${position}, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity.toFixed(3)}), transparent ${radius}%)`;
+  });
+
+  return {
+    background: [
+      ...washes,
+      "radial-gradient(circle at 50% 8%, rgba(255, 249, 239, 0.46), transparent 38%)",
+      "linear-gradient(135deg, #f7f1e7 0%, #eef2e7 100%)",
+    ].join(", "),
+    backgroundAttachment: "fixed",
+  } as React.CSSProperties;
+}
+
+function hexToRgb(hex: string) {
+  const normalized = hex.replace("#", "");
+  const value = Number.parseInt(normalized.length === 3 ? normalized.split("").map((char) => char + char).join("") : normalized, 16);
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255,
   };
 }
 
