@@ -79,7 +79,7 @@ type NotebookMembership = {
 };
 
 const statusOptions: Status[] = ["开心", "普通", "有点累", "卡住了", "想聊天", "需要安静"];
-const promptOptions = ["碎碎念", "报个平安", "有点堵", "小进展", "想被听见"];
+const promptOptions = ["碎碎念", "奇思", "我跟你讲哦…", "说不清", "想被听见"];
 const stampOptions = [
   { name: "爱心", hint: "关心", icon: Heart },
   { name: "星星", hint: "鼓励", icon: Star },
@@ -939,6 +939,10 @@ function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null,
   const [status, setStatus] = useState<Status | null>(null);
   const [diaryDate, setDiaryDate] = useState(() => localDateKey(new Date()));
   const [weather, setWeather] = useState<WeatherKey | null>(null);
+  const [selectedPrompt, setSelectedPrompt] = useState<string | null>(null);
+  const [customPromptOpen, setCustomPromptOpen] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState("");
+  const currentPrompt = customPrompt.trim() ? formatPromptTag(customPrompt) : selectedPrompt ? formatPromptTag(selectedPrompt) : null;
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -948,48 +952,91 @@ function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null,
     setStatus(null);
     setDiaryDate(localDateKey(new Date()));
     setWeather(null);
+    setSelectedPrompt(null);
+    setCustomPrompt("");
+    setCustomPromptOpen(false);
+  }
+
+  function choosePrompt(prompt: string) {
+    setSelectedPrompt((value) => (value === prompt ? null : prompt));
+    setCustomPrompt("");
+  }
+
+  function updateCustomPrompt(value: string) {
+    const nextValue = value.slice(0, 24);
+    setCustomPrompt(nextValue);
+    if (nextValue.trim()) setSelectedPrompt(null);
   }
 
   return (
     <section className="write-view">
       <p className="eyebrow">不用组织得很好</p>
       <h2>今天有什么小事想放下来？</h2>
-      <div className="prompt-strip">
-        {promptOptions.map((prompt) => (
-          <button type="button" key={prompt} onClick={() => setText((value) => value || `${prompt}：`)}>
-            {prompt}
-          </button>
-        ))}
-      </div>
       <form onSubmit={submit} className="write-form">
         <div className="diary-fields">
-          <label className="diary-date-field">
-            <span>Date:</span>
-            <input type="date" value={diaryDate} onChange={(event) => setDiaryDate(event.target.value)} required />
-            <small>这页写在哪一天</small>
-          </label>
-          <fieldset className="weather-field">
-            <legend>Weather:</legend>
-            <div className="weather-options">
-              {weatherOptions.map((option) => {
-                const Icon = option.icon;
-                return (
-                  <button
-                    type="button"
-                    key={option.key}
-                    className={weather === option.key ? "selected" : ""}
-                    aria-pressed={weather === option.key}
-                    onClick={() => setWeather(weather === option.key ? null : option.key)}
-                  >
-                    <Icon size={16} />
-                    <span>{option.label}</span>
-                  </button>
-                );
-              })}
+          <div className="diary-meta-fields">
+            <label className="diary-date-field">
+              <span>Date:</span>
+              <input type="date" value={diaryDate} onChange={(event) => setDiaryDate(event.target.value)} required />
+            </label>
+            <div className="weather-field" role="group" aria-label="Weather">
+              <span className="weather-label">Weather:</span>
+              <div className="weather-options">
+                {weatherOptions.map((option) => {
+                  const Icon = option.icon;
+                  return (
+                    <button
+                      type="button"
+                      key={option.key}
+                      className={weather === option.key ? "selected" : ""}
+                      aria-pressed={weather === option.key}
+                      onClick={() => setWeather(weather === option.key ? null : option.key)}
+                    >
+                      <Icon size={16} />
+                      <span>{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </fieldset>
+          </div>
         </div>
-        <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="有什么不值得专门发消息，但想让他们知道？" />
+        <div className="compose-paper">
+          <div className="prompt-field">
+            <div className="prompt-strip">
+              {promptOptions.map((prompt) => (
+                <button
+                  type="button"
+                  key={prompt}
+                  className={selectedPrompt === prompt && !customPrompt.trim() ? "selected" : ""}
+                  aria-pressed={selectedPrompt === prompt && !customPrompt.trim()}
+                  onClick={() => choosePrompt(prompt)}
+                >
+                  <span className="prompt-option-text">{prompt}</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                className={`custom-prompt-toggle ${customPrompt.trim() ? "selected" : ""}`}
+                aria-pressed={Boolean(customPrompt.trim())}
+                onClick={() => setCustomPromptOpen((value) => !value)}
+              >
+                #自定义
+              </button>
+              {currentPrompt && customPrompt.trim() && <small className="current-custom-prompt">{currentPrompt}</small>}
+            </div>
+            {customPromptOpen && (
+              <input
+                className="custom-prompt-input"
+                value={customPrompt}
+                onChange={(event) => updateCustomPrompt(event.target.value)}
+                placeholder="比如 #今天风很好"
+                maxLength={24}
+              />
+            )}
+          </div>
+          <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="想说鼠莫？" />
+        </div>
         <p className="writing-hint">那一天的你大概是什么状态？可以不选。</p>
         <div className="status-grid">
           {statusOptions.map((option) => (
@@ -1329,6 +1376,12 @@ function quietSummary(diary: Diary) {
 
 function shortText(text: string) {
   return text.length > 16 ? `${text.slice(0, 16)}...` : text;
+}
+
+function formatPromptTag(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
 }
 
 function mergeHighlights(highlights: HighlightRange[], next: HighlightRange) {
