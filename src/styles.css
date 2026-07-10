@@ -365,30 +365,19 @@ small {
 
 .day-page {
   position: relative;
-  --page-wash-a: rgba(255, 250, 241, 0.96);
-  --page-wash-b: rgba(250, 239, 224, 0.92);
-  --entry-wash-a: rgba(244, 212, 181, 0.16);
-  --entry-wash-b: rgba(213, 226, 203, 0.14);
-  padding: 17px 15px 8px;
-  border: 1px solid rgba(210, 193, 174, 0.95);
-  border-radius: 8px;
-  background:
-    linear-gradient(90deg, rgba(185, 117, 80, 0.16) 0 1px, transparent 1px 100%),
-    linear-gradient(135deg, var(--page-wash-a) 0%, var(--page-wash-b) 100%);
-  background-position: 35px 0, 0 0;
-  box-shadow: 0 3px 10px rgba(102, 73, 43, 0.045);
+  padding: 4px 0 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .day-page:nth-child(even) {
-  --page-wash-a: rgba(250, 246, 235, 0.96);
-  --page-wash-b: rgba(239, 230, 214, 0.92);
-  --entry-wash-a: rgba(220, 230, 207, 0.18);
-  --entry-wash-b: rgba(238, 209, 196, 0.14);
+  background: transparent;
 }
 
 .day-page h2 {
-  margin: 0 0 4px;
-  padding-left: 30px;
+  margin: 0 0 8px;
+  padding-left: 6px;
   color: #6d523f;
   font-family: var(--font-ui);
   font-size: 18px;
@@ -397,29 +386,34 @@ small {
 
 .diary-entry {
   position: relative;
-  padding: 15px 0 22px 30px;
-  border-bottom: 1px solid rgba(217, 202, 184, 0.42);
+  padding: 16px 14px 20px 34px;
+  border: 1px solid color-mix(in srgb, var(--person-light) 58%, rgba(210, 193, 174, 0.72));
   border-left: 2px solid color-mix(in srgb, var(--person-base) 34%, transparent);
-  border-radius: 6px;
+  border-radius: 8px;
   background:
-    radial-gradient(circle at 76% 34%, color-mix(in srgb, var(--person-paper) 58%, transparent), transparent 48%),
-    radial-gradient(circle at 12% 78%, color-mix(in srgb, var(--person-light) 14%, transparent), transparent 42%),
-    linear-gradient(145deg, color-mix(in srgb, var(--person-paper) 24%, transparent) 0%, color-mix(in srgb, var(--entry-wash-b) 52%, transparent) 100%);
+    radial-gradient(circle at 76% 34%, rgba(255, 255, 255, 0.38), transparent 46%),
+    radial-gradient(circle at 14% 82%, color-mix(in srgb, var(--person-light) 16%, transparent), transparent 42%),
+    linear-gradient(135deg, var(--person-paper), var(--person-paper));
+  box-shadow: 0 3px 10px rgba(102, 73, 43, 0.045);
   transition: background 180ms ease;
 }
 
 .diary-entry:nth-child(2n) {
-  --entry-wash-a: rgba(218, 227, 205, 0.16);
-  --entry-wash-b: rgba(244, 217, 190, 0.12);
+  background:
+    radial-gradient(circle at 72% 28%, rgba(255, 255, 255, 0.34), transparent 46%),
+    radial-gradient(circle at 16% 84%, color-mix(in srgb, var(--person-light) 14%, transparent), transparent 42%),
+    linear-gradient(135deg, var(--person-paper), var(--person-paper));
 }
 
 .diary-entry:nth-child(3n) {
-  --entry-wash-a: rgba(237, 210, 222, 0.14);
-  --entry-wash-b: rgba(225, 216, 197, 0.14);
+  background:
+    radial-gradient(circle at 78% 38%, rgba(255, 255, 255, 0.32), transparent 48%),
+    radial-gradient(circle at 10% 76%, color-mix(in srgb, var(--person-light) 13%, transparent), transparent 42%),
+    linear-gradient(135deg, var(--person-paper), var(--person-paper));
 }
 
 .diary-entry:last-child {
-  border-bottom: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--person-light) 58%, rgba(210, 193, 174, 0.72));
 }
 
 .diary-entry::before {
