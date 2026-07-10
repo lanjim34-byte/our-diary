@@ -19,6 +19,7 @@ import type { Session, User } from "@supabase/supabase-js";
 import { hasSupabaseEnv, supabase } from "./supabaseClient";
 import { defaultUserColor, getUserColor, stableColorKey, userColors, type UserColorKey } from "./constants/userColors";
 import { getWeatherOption, weatherOptions, type WeatherKey } from "./constants/weatherOptions";
+import { getMoodToneOption, moodToneFromValue, moodToneOptions, type MoodTone } from "./constants/moodTemperature";
 
 type Status = "开心" | "普通" | "有点累" | "卡住了" | "想聊天" | "需要安静";
 type Tab = "feed" | "write" | "friends" | "week";
@@ -50,6 +51,8 @@ type Diary = {
   authorId: string;
   text: string;
   status?: Status | null;
+  moodTone?: MoodTone | null;
+  moodWords: string[];
   diaryDate: string;
   weather?: string | null;
   responses: { by: string; text: string; colorKey?: string | null }[];
@@ -177,7 +180,7 @@ function App() {
 
       const { data: entryRows, error: entriesError } = await supabase
         .from("diary_entries")
-        .select("id,notebook_id,author_id,content,mood,diary_date,weather,created_at,updated_at")
+        .select("id,notebook_id,author_id,content,mood,mood_tone,mood_words,diary_date,weather,created_at,updated_at")
         .eq("notebook_id", notebook.id)
         .order("diary_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
@@ -198,6 +201,8 @@ function App() {
         authorId: entry.author_id,
         text: entry.content,
         status: isStatus(entry.mood) ? entry.mood : null,
+        moodTone: getMoodToneOption(entry.mood_tone)?.key ?? null,
+        moodWords: parseMoodWords(entry.mood_words),
         diaryDate: entry.diary_date || localDateKey(new Date(entry.created_at)),
         weather: entry.weather,
         createdAt: entry.created_at,
@@ -274,13 +279,15 @@ function App() {
     }
   }
 
-  async function addDiary(text: string, mood: Status | null, diaryDate: string, weather: WeatherKey | null) {
+  async function addDiary(text: string, mood: Status | null, diaryDate: string, weather: WeatherKey | null, moodTone: MoodTone | null, moodWords: string[]) {
     if (!supabase || !activeNotebook || !session?.user) return;
     const { error: insertError } = await supabase.from("diary_entries").insert({
       notebook_id: activeNotebook.id,
       author_id: session.user.id,
       content: text,
       mood,
+      mood_tone: moodTone,
+      mood_words: moodWords.length ? moodWords : null,
       diary_date: diaryDate,
       weather,
     });
@@ -604,10 +611,10 @@ function DiaryEntry({
         <button className="person-link" onClick={onPerson}>
           <strong>{author.profile.display_name}</strong>
         </button>
-        {diary.status && <span className={`status ${statusClass(diary.status)}`}>那天像：{diary.status}</span>}
       </div>
 
       <DiaryPageMeta diaryDate={diary.diaryDate} weather={diary.weather} />
+      <MoodLine moodTone={diary.moodTone} moodWords={diary.moodWords} fallbackMood={diary.status} />
 
       <div className="diary-body">
         <p className="diary-text" ref={textRef} onMouseUp={handleTextSelection} onKeyUp={handleTextSelection}>
@@ -934,27 +941,33 @@ function ColorPicker({ selected, onSelect }: { selected: UserColorKey; onSelect:
   );
 }
 
-function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null, diaryDate: string, weather: WeatherKey | null) => void }) {
+function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null, diaryDate: string, weather: WeatherKey | null, moodTone: MoodTone | null, moodWords: string[]) => void }) {
   const [text, setText] = useState("");
-  const [status, setStatus] = useState<Status | null>(null);
   const [diaryDate, setDiaryDate] = useState(() => localDateKey(new Date()));
   const [weather, setWeather] = useState<WeatherKey | null>(null);
   const [selectedPrompt, setSelectedPrompt] = useState<string | null>(null);
   const [customPromptOpen, setCustomPromptOpen] = useState(false);
   const [customPrompt, setCustomPrompt] = useState("");
+  const [moodTone, setMoodTone] = useState<MoodTone | null>(null);
+  const [moodSliderValue, setMoodSliderValue] = useState(50);
+  const [moodWords, setMoodWords] = useState<string[]>([]);
   const currentPrompt = customPrompt.trim() ? formatPromptTag(customPrompt) : selectedPrompt ? formatPromptTag(selectedPrompt) : null;
+  const shownMoodTone = moodTone ?? moodToneFromValue(moodSliderValue);
+  const activeMoodOption = getMoodToneOption(shownMoodTone) ?? moodToneOptions[2];
 
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!text.trim() || !diaryDate) return;
-    onSubmit(text.trim(), status, diaryDate, weather);
+    onSubmit(text.trim(), null, diaryDate, weather, moodTone, moodWords);
     setText("");
-    setStatus(null);
     setDiaryDate(localDateKey(new Date()));
     setWeather(null);
     setSelectedPrompt(null);
     setCustomPrompt("");
     setCustomPromptOpen(false);
+    setMoodTone(null);
+    setMoodSliderValue(50);
+    setMoodWords([]);
   }
 
   function choosePrompt(prompt: string) {
@@ -966,6 +979,22 @@ function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null,
     const nextValue = value.slice(0, 24);
     setCustomPrompt(nextValue);
     if (nextValue.trim()) setSelectedPrompt(null);
+  }
+
+  function updateMoodTone(value: number) {
+    setMoodSliderValue(value);
+    setMoodTone(moodToneFromValue(value));
+    setMoodWords([]);
+  }
+
+  function toggleMoodWord(word: string) {
+    if (!moodTone) setMoodTone(shownMoodTone);
+    setMoodWords((current) => {
+      if (current.includes(word)) {
+        return current.filter((item) => item !== word);
+      }
+      return [...current, word].slice(-3);
+    });
   }
 
   return (
@@ -1037,13 +1066,43 @@ function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null,
           </div>
           <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="想说鼠莫？" />
         </div>
-        <p className="writing-hint">那一天的你大概是什么状态？可以不选。</p>
-        <div className="status-grid">
-          {statusOptions.map((option) => (
-            <button type="button" key={option} className={status === option ? "selected" : ""} onClick={() => setStatus(status === option ? null : option)}>
-              {option}
-            </button>
-          ))}
+        <div className="mood-temperature">
+          <div className="mood-temperature-head">
+            <div>
+              <h3>心情色温</h3>
+              <p>今天心情肿么样？</p>
+            </div>
+            {moodTone && <span>{activeMoodOption.label}</span>}
+          </div>
+          <div className="tone-slider-row">
+            <span>暗暗嘟</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={moodSliderValue}
+              onChange={(event) => updateMoodTone(Number(event.target.value))}
+              aria-label="心情色温"
+            />
+            <span>亮亮嘟</span>
+          </div>
+          <div className="mood-word-area">
+            <p>也许像：</p>
+            <div className="mood-word-grid">
+              {activeMoodOption.words.map((word) => (
+                <button
+                  type="button"
+                  key={word}
+                  className={moodWords.includes(word) ? "selected" : ""}
+                  aria-pressed={moodWords.includes(word)}
+                  onClick={() => toggleMoodWord(word)}
+                >
+                  {word}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
         <button className="publish-button">写进本子</button>
       </form>
@@ -1126,6 +1185,20 @@ function DiaryPageMeta({ diaryDate, weather }: { diaryDate: string; weather?: st
         </p>
       )}
     </div>
+  );
+}
+
+function MoodLine({ moodTone, moodWords, fallbackMood }: { moodTone?: MoodTone | null; moodWords: string[]; fallbackMood?: Status | null }) {
+  const toneLabel = getMoodToneOption(moodTone)?.label;
+  const words = moodWords.length ? moodWords.join("、") : "";
+  const value = [toneLabel, words].filter(Boolean).join(" · ") || fallbackMood;
+  if (!value) return null;
+
+  return (
+    <p className="mood-line">
+      <span>心里：</span>
+      <strong>{value}</strong>
+    </p>
   );
 }
 
@@ -1382,6 +1455,11 @@ function formatPromptTag(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return "";
   return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+}
+
+function parseMoodWords(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((word): word is string => typeof word === "string").slice(0, 3);
 }
 
 function mergeHighlights(highlights: HighlightRange[], next: HighlightRange) {
