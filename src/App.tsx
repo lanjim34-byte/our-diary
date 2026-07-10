@@ -102,6 +102,8 @@ function App() {
   const [tab, setTab] = useState<Tab>("feed");
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [openDiaryId, setOpenDiaryId] = useState<string | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -396,12 +398,18 @@ function App() {
   const selectedMemberDiaries = selectedMember ? diaries.filter((diary) => diary.authorId === selectedMember.user_id) : [];
   const groupedDiaries = groupDiaries(diaries);
 
+  function copyInviteCode() {
+    if (!activeNotebook) return;
+    navigator.clipboard?.writeText(activeNotebook.invite_code);
+    setInviteCopied(true);
+    window.setTimeout(() => setInviteCopied(false), 1600);
+  }
+
   return (
     <div className="app" style={notebookBackgroundStyle(members)}>
       <main className="phone-shell">
         <header className="topbar">
           <div>
-            <p className="eyebrow">只在 {members.length || 1} 个成员之间</p>
             <h1>{activeNotebook.name}</h1>
           </div>
           <button className="soft-icon" onClick={() => setTab("write")} aria-label="写一笔">
@@ -413,11 +421,6 @@ function App() {
 
         {tab === "feed" && (
           <section className="notebook-home">
-            <div className="notebook-note invite-note">
-              <Sparkles size={18} />
-              <span>邀请码：{activeNotebook.invite_code}</span>
-              <button onClick={() => navigator.clipboard?.writeText(activeNotebook.invite_code)}>复制</button>
-            </div>
             <div className="member-strip">
               {members.map((member) => (
                 <button
@@ -432,10 +435,22 @@ function App() {
                   <span className="avatar" style={personStyle(member.profile)}>{member.profile.avatar_initial}</span>
                   <span>
                     <strong>{member.profile.display_name}</strong>
-                    <small>{member.role === "owner" ? "创建者" : "成员"}</small>
+                    <small>{memberMoodSummary(member, diaries)}</small>
                   </span>
                 </button>
               ))}
+            </div>
+            <div className="notebook-tools">
+              <button className="invite-toggle" onClick={() => setInviteOpen((value) => !value)}>
+                <Sparkles size={15} />
+                邀请朋友
+              </button>
+              {inviteOpen && (
+                <div className="invite-popover">
+                  <span>邀请码：{activeNotebook.invite_code}</span>
+                  <button onClick={copyInviteCode}>{inviteCopied ? "已复制" : "复制"}</button>
+                </div>
+              )}
             </div>
 
             {loading && <EmptyState title="正在翻页" text="把这本子的内容取回来。" />}
@@ -1310,6 +1325,18 @@ function memberFor(members: Member[], id: string): Member {
     role: "member",
     profile: fallbackProfile(id),
   };
+}
+
+function memberMoodSummary(member: Member, diaries: Diary[]) {
+  const latest = diaries.find((diary) => diary.authorId === member.user_id);
+  if (!latest) return "这一页还空着";
+
+  const toneLabel = getMoodToneOption(latest.moodTone)?.label;
+  const firstWord = latest.moodWords[0];
+  const moodText = [toneLabel, firstWord].filter(Boolean).join(" · ");
+  if (moodText) return moodText;
+  if (latest.status) return latest.status;
+  return "最近写过";
 }
 
 function personStyle(profile: Profile) {
