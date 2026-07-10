@@ -402,8 +402,9 @@ small {
   border-left: 2px solid color-mix(in srgb, var(--person-base) 34%, transparent);
   border-radius: 6px;
   background:
-    radial-gradient(circle at 88% 28%, color-mix(in srgb, var(--person-light) 28%, transparent), transparent 36%),
-    linear-gradient(145deg, color-mix(in srgb, var(--person-paper) 52%, transparent) 0%, var(--entry-wash-b) 100%);
+    radial-gradient(circle at 76% 34%, color-mix(in srgb, var(--person-paper) 58%, transparent), transparent 48%),
+    radial-gradient(circle at 12% 78%, color-mix(in srgb, var(--person-light) 14%, transparent), transparent 42%),
+    linear-gradient(145deg, color-mix(in srgb, var(--person-paper) 24%, transparent) 0%, color-mix(in srgb, var(--entry-wash-b) 52%, transparent) 100%);
   transition: background 180ms ease;
 }
 
@@ -483,6 +484,7 @@ small {
   position: relative;
   margin-bottom: 14px;
   color: #332b25;
+  background: transparent;
   font-family: var(--font-hand);
   font-size: clamp(22px, 6vw, 26px);
   letter-spacing: 0.02em;
@@ -490,49 +492,35 @@ small {
 }
 
 .hand-highlight {
-  position: relative;
-  z-index: 0;
+  display: inline;
   padding: 0 0.08em;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-
-.hand-highlight::before {
-  content: "";
-  position: absolute;
-  left: -0.08em;
-  right: -0.12em;
-  top: 52%;
-  height: 0.74em;
-  border-radius: 55% 45% 50% 40%;
+  border-radius: 0.28em;
   background:
-    radial-gradient(ellipse at 18% 45%, color-mix(in srgb, var(--highlight-highlight) 60%, transparent), transparent 42%),
+    radial-gradient(ellipse at 18% 58%, color-mix(in srgb, var(--highlight-highlight) 38%, transparent), transparent 44%),
     linear-gradient(
       100deg,
-      color-mix(in srgb, var(--highlight-highlight) 28%, transparent) 0%,
-      color-mix(in srgb, var(--highlight-highlight) 78%, transparent) 12%,
+      transparent 0%,
+      color-mix(in srgb, var(--highlight-highlight) 68%, transparent) 9%,
       var(--highlight-highlight) 48%,
-      color-mix(in srgb, var(--highlight-highlight) 70%, transparent) 82%,
-      color-mix(in srgb, var(--highlight-highlight) 32%, transparent) 100%
+      color-mix(in srgb, var(--highlight-highlight) 76%, transparent) 88%,
+      transparent 100%
     );
-  filter: saturate(0.92);
-  pointer-events: none;
-  transform: rotate(-0.7deg) skewX(-4deg);
-  z-index: -1;
+  background-repeat: no-repeat;
+  background-position: 0 68%, 0 69%;
+  background-size: 100% 0.58em, 100% 0.7em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  text-shadow: 0 0 0 rgba(51, 43, 37, 0.01);
 }
 
-.highlight-variant-1::before {
-  top: 50%;
-  height: 0.68em;
-  border-radius: 48% 52% 44% 56%;
-  transform: rotate(0.45deg) skewX(-2deg) scaleY(0.96);
+.highlight-variant-1 {
+  background-position: 0 65%, 0 67%;
+  background-size: 100% 0.52em, 100% 0.64em;
 }
 
-.highlight-variant-2::before {
-  top: 55%;
-  height: 0.78em;
-  border-radius: 58% 42% 54% 46%;
-  transform: rotate(-1.1deg) skewX(-5deg) scaleY(1.02);
+.highlight-variant-2 {
+  background-position: 0 72%, 0 71%;
+  background-size: 100% 0.62em, 100% 0.74em;
 }
 
 .highlight-bubble {
@@ -568,6 +556,7 @@ small {
   margin-bottom: 4px;
   padding-right: 84px;
   min-height: 104px;
+  background: transparent;
 }
 
 .follow-line {
