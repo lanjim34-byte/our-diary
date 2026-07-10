@@ -9,6 +9,15 @@
 :root {
   --font-hand: "ChillZhuo", serif;
   --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --person-base: #B9855A;
+  --person-paper: #FFF4E7;
+  --person-light: #E8D0B8;
+  --person-highlight: rgba(185, 133, 90, 0.22);
+  --note-paper: #FFF4E7;
+  --note-light: #E8D0B8;
+  --stamp-base: #B9855A;
+  --stamp-light: #E8D0B8;
+  --highlight-highlight: rgba(185, 133, 90, 0.22);
   color: #302821;
   background: #eee5da;
   font-family: var(--font-ui);
@@ -179,6 +188,87 @@ h3 {
   line-height: 1.6;
 }
 
+.color-picker {
+  display: grid;
+  gap: 10px;
+}
+
+.color-picker-title {
+  margin: 0;
+  color: #7d6652;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.color-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.color-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 50px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--person-light) 72%, rgba(205, 184, 165, 0.78));
+  border-radius: 8px;
+  color: #58483b;
+  background:
+    radial-gradient(circle at 86% 20%, color-mix(in srgb, var(--person-light) 34%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--person-paper) 82%, #fffaf3), rgba(255, 250, 243, 0.68));
+  text-align: left;
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.color-option:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(92, 67, 45, 0.07);
+}
+
+.color-option.selected {
+  border-color: color-mix(in srgb, var(--person-base) 42%, rgba(120, 96, 70, 0.24));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--person-base) 18%, transparent), 0 6px 16px rgba(92, 67, 45, 0.08);
+}
+
+.color-paper-swatch {
+  position: relative;
+  width: 28px;
+  height: 32px;
+  border: 1px solid color-mix(in srgb, var(--person-base) 28%, transparent);
+  border-radius: 4px 5px 3px 5px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.36), transparent 44%),
+    var(--person-paper);
+  box-shadow: 0 3px 8px rgba(92, 67, 45, 0.08);
+  transform: rotate(-3deg);
+}
+
+.color-paper-swatch::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 7px;
+  left: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--person-base) 42%, transparent);
+  transform: rotate(-5deg);
+}
+
+.color-option:nth-child(even) .color-paper-swatch {
+  transform: rotate(3deg);
+}
+
+.color-option strong {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 650;
+}
+
 .auth-shell {
   min-height: 100vh;
 }
@@ -230,9 +320,10 @@ h3 {
 .member-pill {
   min-width: 148px;
   padding: 9px 10px;
-  border: 1px solid rgba(204, 185, 165, 0.75);
+  border: 1px solid color-mix(in srgb, var(--person-light) 72%, rgba(204, 185, 165, 0.75));
   border-radius: 8px;
-  background: rgba(255, 250, 243, 0.64);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--person-paper) 62%, transparent), rgba(255, 250, 243, 0.58));
   font-family: var(--font-ui);
 }
 
@@ -244,7 +335,8 @@ h3 {
   place-items: center;
   border-radius: 50%;
   color: #684c36;
-  background: #ead2ba;
+  border: 1px solid color-mix(in srgb, var(--person-base) 32%, transparent);
+  background: var(--person-light);
   font-family: var(--font-ui);
   font-weight: 700;
 }
@@ -307,10 +399,11 @@ small {
   position: relative;
   padding: 15px 0 22px 30px;
   border-bottom: 1px solid rgba(217, 202, 184, 0.42);
+  border-left: 2px solid color-mix(in srgb, var(--person-base) 34%, transparent);
   border-radius: 6px;
   background:
-    radial-gradient(circle at 88% 28%, var(--entry-wash-a), transparent 36%),
-    linear-gradient(145deg, transparent 0%, var(--entry-wash-b) 100%);
+    radial-gradient(circle at 88% 28%, color-mix(in srgb, var(--person-light) 28%, transparent), transparent 36%),
+    linear-gradient(145deg, color-mix(in srgb, var(--person-paper) 52%, transparent) 0%, var(--entry-wash-b) 100%);
   transition: background 180ms ease;
 }
 
@@ -336,7 +429,8 @@ small {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #c49f7a;
+  background: var(--person-base);
+  opacity: 0.72;
 }
 
 .diary-head,
@@ -373,15 +467,17 @@ small {
   color: #806b59;
   font-family: var(--font-ui);
   font-size: 12px;
-  background: #eee3d4;
+  background: color-mix(in srgb, var(--person-paper) 78%, #eee3d4);
 }
 
-.happy { background: #f4dfb9; }
-.plain { background: #e9e0d2; }
-.tired { background: #ecd8cc; }
-.stuck { background: #ead0c8; }
-.chat { background: #dce5cf; }
-.quiet { background: #ddd8c9; }
+.happy,
+.plain,
+.tired,
+.stuck,
+.chat,
+.quiet {
+  background: color-mix(in srgb, var(--person-paper) 76%, var(--person-light));
+}
 
 .diary-text {
   position: relative;
@@ -410,14 +506,14 @@ small {
   height: 0.74em;
   border-radius: 55% 45% 50% 40%;
   background:
-    radial-gradient(ellipse at 18% 45%, rgba(246, 222, 112, 0.18), transparent 42%),
+    radial-gradient(ellipse at 18% 45%, color-mix(in srgb, var(--highlight-highlight) 60%, transparent), transparent 42%),
     linear-gradient(
       100deg,
-      rgba(246, 222, 112, 0.07) 0%,
-      rgba(246, 222, 112, 0.34) 12%,
-      rgba(246, 222, 112, 0.44) 48%,
-      rgba(246, 222, 112, 0.30) 82%,
-      rgba(246, 222, 112, 0.09) 100%
+      color-mix(in srgb, var(--highlight-highlight) 28%, transparent) 0%,
+      color-mix(in srgb, var(--highlight-highlight) 78%, transparent) 12%,
+      var(--highlight-highlight) 48%,
+      color-mix(in srgb, var(--highlight-highlight) 70%, transparent) 82%,
+      color-mix(in srgb, var(--highlight-highlight) 32%, transparent) 100%
     );
   filter: saturate(0.92);
   pointer-events: none;
@@ -481,6 +577,8 @@ small {
   font-size: 17px;
   letter-spacing: 0.02em;
   line-height: 1.8;
+  border-left: 2px solid color-mix(in srgb, var(--person-base) 24%, transparent);
+  padding-left: 8px;
 }
 
 .follow-line span {
@@ -580,12 +678,12 @@ small {
   width: 78px;
   min-height: 42px;
   padding: 5px 7px;
-  border: 2px solid rgba(126, 82, 57, 0.34);
+  border: 2px solid color-mix(in srgb, var(--stamp-base) 42%, transparent);
   border-radius: 53% 47% 49% 51% / 47% 52% 48% 53%;
-  color: rgba(122, 76, 52, 0.72);
+  color: color-mix(in srgb, var(--stamp-base) 72%, #4c3a2e);
   font-family: var(--font-hand);
   background: transparent;
-  box-shadow: inset 0 0 0 2px rgba(126, 82, 57, 0.025);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--stamp-light) 16%, transparent);
   mix-blend-mode: multiply;
   transform: rotate(-3deg);
   opacity: 0;
@@ -624,34 +722,12 @@ small {
   white-space: nowrap;
 }
 
-.stamp-爱心 {
-  color: rgba(145, 74, 66, 0.68);
-  border-color: rgba(145, 74, 66, 0.34);
-  background: rgba(145, 74, 66, 0.018);
-}
-
-.stamp-星星 {
-  color: rgba(129, 94, 37, 0.68);
-  border-color: rgba(129, 94, 37, 0.32);
-  background: rgba(129, 94, 37, 0.018);
-}
-
-.stamp-水滴 {
-  color: rgba(83, 91, 101, 0.68);
-  border-color: rgba(83, 91, 101, 0.31);
-  background: rgba(83, 91, 101, 0.018);
-}
-
-.stamp-拥抱 {
-  color: rgba(109, 82, 49, 0.7);
-  border-color: rgba(109, 82, 49, 0.32);
-  background: rgba(109, 82, 49, 0.018);
-}
-
+.stamp-爱心,
+.stamp-星星,
+.stamp-水滴,
+.stamp-拥抱,
 .stamp-读到了 {
-  color: rgba(79, 95, 70, 0.68);
-  border-color: rgba(79, 95, 70, 0.32);
-  background: rgba(79, 95, 70, 0.018);
+  background: color-mix(in srgb, var(--stamp-light) 8%, transparent);
 }
 
 .entry-expanded {
@@ -769,12 +845,12 @@ small {
   min-height: 42px;
   margin-top: var(--lift);
   padding: 10px 13px 9px;
-  border: 1px solid rgba(205, 184, 145, 0.54);
+  border: 1px solid color-mix(in srgb, var(--note-light) 72%, rgba(205, 184, 145, 0.54));
   border-radius: 3px 5px 4px 6px;
   color: #56483d;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.3), transparent 42%),
-    #fff5cf;
+    var(--note-paper);
   box-shadow: 0 5px 12px rgba(94, 68, 40, 0.075);
   text-align: left;
   transform: rotate(var(--tilt)) translateX(0);
@@ -786,7 +862,7 @@ small {
   width: min(78%, 330px);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.28), transparent 45%),
-    #fff9df;
+    var(--note-paper);
 }
 
 .paper-note:nth-child(3n) {
@@ -794,7 +870,7 @@ small {
   width: min(90%, 370px);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 45%),
-    #f8eed9;
+    var(--note-paper);
 }
 
 .paper-note strong {
@@ -823,7 +899,7 @@ small {
   min-height: 98px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.32), transparent 42%),
-    #fff7d8;
+    var(--note-paper);
   box-shadow: 0 10px 20px rgba(94, 68, 40, 0.12);
   transform: rotate(0deg) translateX(8px) translateY(-2px);
 }

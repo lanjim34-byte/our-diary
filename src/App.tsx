@@ -17,6 +17,7 @@ import {
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { hasSupabaseEnv, supabase } from "./supabaseClient";
+import { defaultUserColor, getUserColor, stableColorKey, userColors, type UserColorKey } from "./constants/userColors";
 
 type Status = "开心" | "普通" | "有点累" | "卡住了" | "想聊天" | "需要安静";
 type Tab = "feed" | "write" | "friends" | "week";
@@ -26,6 +27,7 @@ type Profile = {
   id: string;
   display_name: string;
   avatar_initial: string;
+  color_key: string | null;
 };
 
 type Notebook = {
@@ -48,8 +50,8 @@ type Diary = {
   time: string;
   text: string;
   status?: Status | null;
-  responses: { by: string; text: string }[];
-  comments: { by: string; text: string; time: string }[];
+  responses: { by: string; text: string; colorKey?: string | null }[];
+  comments: { by: string; text: string; time: string; colorKey?: string | null }[];
   followUps: { by: string; text: string; time: string }[];
   highlights: HighlightRange[];
   createdAt: string;
@@ -59,6 +61,7 @@ type HighlightRange = {
   id: string;
   start: number;
   end: number;
+  colorKey?: string | null;
 };
 
 type HighlightBubble = {
@@ -157,7 +160,7 @@ function App() {
     try {
       const { data: memberRows, error: membersError } = await supabase
         .from("notebook_members")
-        .select("user_id, role, profiles(id,display_name,avatar_initial)")
+        .select("user_id, role, profiles(id,display_name,avatar_initial,color_key)")
         .eq("notebook_id", notebook.id)
         .order("joined_at", { ascending: true });
       if (membersError) throw membersError;
@@ -165,7 +168,7 @@ function App() {
       const nextMembers: Member[] = ((memberRows ?? []) as any[]).map((row) => ({
         user_id: row.user_id,
         role: row.role,
-        profile: row.profiles,
+        profile: row.profiles ?? fallbackProfile(row.user_id),
       }));
       setMembers(nextMembers);
       setSelectedPersonId((current) => current ?? nextMembers[0]?.user_id ?? null);
@@ -186,7 +189,7 @@ function App() {
         fetchByDiaryIds("highlights", ids),
       ]);
 
-      const profileNames = new Map(nextMembers.map((member) => [member.user_id, member.profile.display_name]));
+      const profilesById = new Map(nextMembers.map((member) => [member.user_id, member.profile]));
       const nextDiaries: Diary[] = entries.map((entry: any) => ({
         id: entry.id,
         authorId: entry.author_id,
@@ -196,16 +199,16 @@ function App() {
         createdAt: entry.created_at,
         responses: stamps
           .filter((stamp: any) => stamp.diary_id === entry.id)
-          .map((stamp: any) => ({ by: profileNames.get(stamp.author_id) ?? "朋友", text: stamp.stamp_type })),
+          .map((stamp: any) => ({ by: profilesById.get(stamp.author_id)?.display_name ?? "朋友", text: stamp.stamp_type, colorKey: profilesById.get(stamp.author_id)?.color_key })),
         comments: paperNotes
           .filter((note: any) => note.diary_id === entry.id)
-          .map((note: any) => ({ by: profileNames.get(note.author_id) ?? "朋友", text: note.content, time: formatTime(note.created_at) })),
+          .map((note: any) => ({ by: profilesById.get(note.author_id)?.display_name ?? "朋友", text: note.content, time: formatTime(note.created_at), colorKey: profilesById.get(note.author_id)?.color_key })),
         followUps: followups
           .filter((followup: any) => followup.diary_id === entry.id)
-          .map((followup: any) => ({ by: profileNames.get(followup.author_id) ?? "朋友", text: followup.content, time: formatTime(followup.created_at) })),
+          .map((followup: any) => ({ by: profilesById.get(followup.author_id)?.display_name ?? "朋友", text: followup.content, time: formatTime(followup.created_at) })),
         highlights: highlights
           .filter((highlight: any) => highlight.diary_id === entry.id)
-          .map((highlight: any) => ({ id: highlight.id, start: highlight.start_index, end: highlight.end_index })),
+          .map((highlight: any) => ({ id: highlight.id, start: highlight.start_index, end: highlight.end_index, colorKey: profilesById.get(highlight.author_id)?.color_key })),
       }));
 
       setDiaries(nextDiaries);
@@ -319,7 +322,7 @@ function App() {
   async function addHighlight(diaryId: string, start: number, end: number) {
     if (!supabase || !activeNotebook || !session?.user) return;
     const diary = diaries.find((item) => item.id === diaryId);
-    const merged = mergeHighlights(diary?.highlights ?? [], { id: `h${Date.now()}`, start, end });
+    const merged = mergeHighlights(diary?.highlights ?? [], { id: `h${Date.now()}`, start, end, colorKey: profile?.color_key });
     setDiaries((items) => items.map((item) => (item.id === diaryId ? { ...item, highlights: merged } : item)));
 
     const { error: insertError } = await supabase.from("highlights").insert({
@@ -345,6 +348,22 @@ function App() {
   }
 
   const client = supabase;
+
+  if (profile && !profile.color_key) {
+    return (
+      <ColorSetupPage
+        profile={profile}
+        onSaved={(nextProfile) => {
+          setProfile(nextProfile);
+          setMembers((current) =>
+            current.map((member) =>
+              member.user_id === nextProfile.id ? { ...member, profile: nextProfile } : member
+            )
+          );
+        }}
+      />
+    );
+  }
 
   if (!activeNotebook) {
     return (
@@ -391,12 +410,13 @@ function App() {
                 <button
                   key={member.user_id}
                   className="member-pill"
+                  style={personStyle(member.profile)}
                   onClick={() => {
                     setSelectedPersonId(member.user_id);
                     setTab("friends");
                   }}
                 >
-                  <span className="avatar">{member.profile.avatar_initial}</span>
+                  <span className="avatar" style={personStyle(member.profile)}>{member.profile.avatar_initial}</span>
                   <span>
                     <strong>{member.profile.display_name}</strong>
                     <small>{member.role === "owner" ? "创建者" : "成员"}</small>
@@ -451,8 +471,8 @@ function App() {
               ))}
             </div>
             {selectedMember && (
-              <article className="profile-panel">
-                <span className="avatar large">{selectedMember.profile.avatar_initial}</span>
+              <article className="profile-panel" style={personStyle(selectedMember.profile)}>
+                <span className="avatar large" style={personStyle(selectedMember.profile)}>{selectedMember.profile.avatar_initial}</span>
                 <div>
                   <p className="eyebrow">最近在本子里写过</p>
                   <h2>{selectedMember.profile.display_name}</h2>
@@ -565,7 +585,7 @@ function DiaryEntry({
   }
 
   return (
-    <article className={`diary-entry ${expanded ? "is-expanded" : ""}`}>
+    <article className={`diary-entry ${expanded ? "is-expanded" : ""}`} style={personStyle(author.profile)}>
       <div className="diary-head">
         <button className="person-link" onClick={onPerson}>
           <strong>{author.profile.display_name}</strong>
@@ -639,7 +659,11 @@ function DiaryEntry({
                   <button
                     key={`${item.by}-${index}`}
                     className={`paper-note ${openNote === index ? "open" : ""}`}
-                    style={{ "--tilt": `${index % 2 === 0 ? -2 : 2}deg`, "--lift": `${index * -7}px` } as React.CSSProperties}
+                    style={{
+                      "--tilt": `${index % 2 === 0 ? -2 : 2}deg`,
+                      "--lift": `${index * -7}px`,
+                      ...colorVars(getUserColor(item.colorKey), "note"),
+                    } as React.CSSProperties}
                     onClick={() => setOpenNote(openNote === index ? null : index)}
                   >
                     <strong>{item.by}</strong>
@@ -687,6 +711,7 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [colorKey, setColorKey] = useState<UserColorKey>(defaultUserColor.key);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -701,7 +726,7 @@ function AuthPage() {
           ? supabase.auth.signUp({
               email,
               password,
-              options: { data: { display_name: displayName || email.split("@")[0] } },
+              options: { data: { display_name: displayName || email.split("@")[0], color_key: colorKey } },
             })
           : supabase.auth.signInWithPassword({ email, password });
 
@@ -729,10 +754,13 @@ function AuthPage() {
           <p>用邮箱登录。这里不用展示，只是把日子轻轻放下来。</p>
           <form className="write-form" onSubmit={submit}>
             {mode === "signup" && (
-              <label className="field-label">
-                你想被怎么称呼
-                <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="比如：阿树" />
-              </label>
+              <>
+                <label className="field-label">
+                  你想被怎么称呼
+                  <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="比如：阿树" />
+                </label>
+                <ColorPicker selected={colorKey} onSelect={setColorKey} />
+              </>
             )}
             <label className="field-label">
               邮箱
@@ -822,6 +850,75 @@ function NotebookEntryPage({
   );
 }
 
+function ColorSetupPage({ profile, onSaved }: { profile: Profile; onSaved: (profile: Profile) => void }) {
+  const [colorKey, setColorKey] = useState<UserColorKey>(stableColorKey(profile.id));
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function saveColor() {
+    if (!supabase) return;
+    setSaving(true);
+    setMessage(null);
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({ color_key: colorKey })
+      .eq("id", profile.id)
+      .select("id,display_name,avatar_initial,color_key")
+      .single();
+    setSaving(false);
+    if (error) {
+      setMessage(errorMessage(error));
+      return;
+    }
+    onSaved(data as Profile);
+  }
+
+  return (
+    <div className="app">
+      <main className="phone-shell auth-shell">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">第一次进本子前</p>
+            <h1>给自己选一支笔</h1>
+          </div>
+        </header>
+        <section className="entry-panel">
+          <p>这会成为你在小本子里的纸面痕迹。文字还是深墨色，颜色只轻轻留在纸边、纸条、印章和高光里。</p>
+          <ColorPicker selected={colorKey} onSelect={setColorKey} />
+          <button className="publish-button" onClick={saveColor} disabled={saving}>{saving ? "正在放进笔袋" : "就用这支"}</button>
+          {message && <p className="small-note-line">{message}</p>}
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function ColorPicker({ selected, onSelect }: { selected: UserColorKey; onSelect: (key: UserColorKey) => void }) {
+  return (
+    <div className="color-picker">
+      <p className="color-picker-title">选一支笔</p>
+      <div className="color-options">
+        {userColors.map((color) => (
+          <button
+            type="button"
+            key={color.key}
+            className={`color-option ${selected === color.key ? "selected" : ""}`}
+            style={{
+              "--person-base": color.base,
+              "--person-paper": color.paper,
+              "--person-light": color.light,
+            } as React.CSSProperties}
+            onClick={() => onSelect(color.key)}
+          >
+            <span className="color-paper-swatch" />
+            <strong>{color.name}</strong>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null) => void }) {
   const [text, setText] = useState("");
   const [status, setStatus] = useState<Status | null>(null);
@@ -897,14 +994,18 @@ function Summary({ title, text }: { title: string; text: string }) {
   );
 }
 
-function StampTrail({ stamps }: { stamps: { by: string; text: string }[] }) {
+function StampTrail({ stamps }: { stamps: { by: string; text: string; colorKey?: string | null }[] }) {
   return (
     <div className="stamp-trail" aria-label="已盖的小印章">
       {stamps.map((stamp, index) => {
         const option = stampOptions.find((item) => item.name === stamp.text) ?? stampOptions[4];
         const Icon = option.icon;
         return (
-          <span className={`stamp-mark stamp-${option.name}`} key={`${stamp.by}-${stamp.text}-${index}`}>
+          <span
+            className={`stamp-mark stamp-${option.name}`}
+            key={`${stamp.by}-${stamp.text}-${index}`}
+            style={colorVars(getUserColor(stamp.colorKey), "stamp") as React.CSSProperties}
+          >
             <Icon size={15} />
             <small>{stamp.by} · {option.name === "读到了" ? "读到" : option.name}</small>
           </span>
@@ -923,7 +1024,11 @@ function HighlightedText({ text, highlights }: { text: string; highlights: Highl
   normalized.forEach((highlight, index) => {
     if (highlight.start > cursor) pieces.push(text.slice(cursor, highlight.start));
     pieces.push(
-      <span className={`hand-highlight highlight-variant-${index % 3}`} key={highlight.id}>
+      <span
+        className={`hand-highlight highlight-variant-${index % 3}`}
+        key={highlight.id}
+        style={colorVars(getUserColor(highlight.colorKey), "highlight") as React.CSSProperties}
+      >
         {text.slice(highlight.start, highlight.end)}
       </span>
     );
@@ -985,12 +1090,22 @@ function SetupMissing() {
 async function ensureProfile(user: User) {
   if (!supabase) throw new Error("Supabase 未配置");
   const displayName = String(user.user_metadata?.display_name || user.email?.split("@")[0] || "新朋友");
+  const { data: existing, error: selectError } = await supabase
+    .from("profiles")
+    .select("id,display_name,avatar_initial,color_key")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (selectError) throw selectError;
+  if (existing) return existing as Profile;
+
+  const colorKey = String(user.user_metadata?.color_key || defaultUserColor.key);
   const profile = {
     id: user.id,
     display_name: displayName,
     avatar_initial: displayName.slice(0, 1) || "友",
+    color_key: colorKey,
   };
-  const { data, error } = await supabase.from("profiles").upsert(profile).select("id,display_name,avatar_initial").single();
+  const { data, error } = await supabase.from("profiles").insert(profile).select("id,display_name,avatar_initial,color_key").single();
   if (error) throw error;
   return data as Profile;
 }
@@ -1006,7 +1121,24 @@ function memberFor(members: Member[], id: string): Member {
   return members.find((member) => member.user_id === id) ?? {
     user_id: id,
     role: "member",
-    profile: { id, display_name: "朋友", avatar_initial: "友" },
+    profile: fallbackProfile(id),
+  };
+}
+
+function personStyle(profile: Profile) {
+  return colorVars(getUserColor(profile.color_key));
+}
+
+function fallbackProfile(id: string): Profile {
+  return { id, display_name: "朋友", avatar_initial: "友", color_key: null };
+}
+
+function colorVars(color = defaultUserColor, prefix = "person") {
+  return {
+    [`--${prefix}-base`]: color.base,
+    [`--${prefix}-paper`]: color.paper,
+    [`--${prefix}-light`]: color.light,
+    [`--${prefix}-highlight`]: color.highlight,
   };
 }
 
