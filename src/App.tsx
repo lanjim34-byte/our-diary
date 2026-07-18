@@ -55,6 +55,7 @@ type Diary = {
   moodWords: string[];
   diaryDate: string;
   weather?: string | null;
+  doodleUrl?: string | null;
   responses: { by: string; text: string; colorKey?: string | null }[];
   comments: { by: string; text: string; time: string; colorKey?: string | null }[];
   followUps: { by: string; text: string; time: string }[];
@@ -81,6 +82,12 @@ type NotebookMembership = {
   role: "owner" | "member";
 };
 
+type SavedDoodle = {
+  id: string;
+  imageUrl: string;
+  createdAt: string;
+};
+
 const statusOptions: Status[] = ["开心", "普通", "有点累", "卡住了", "想聊天", "需要安静"];
 const promptOptions = ["碎碎念", "奇思", "我跟你讲哦…", "说不清", "想被听见"];
 const stampOptions = [
@@ -102,6 +109,7 @@ function App() {
   const [tab, setTab] = useState<Tab>("feed");
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [openDiaryId, setOpenDiaryId] = useState<string | null>(null);
+  const [doodlePreview, setDoodlePreview] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -182,7 +190,7 @@ function App() {
 
       const { data: entryRows, error: entriesError } = await supabase
         .from("diary_entries")
-        .select("id,notebook_id,author_id,content,mood,mood_tone,mood_words,diary_date,weather,created_at,updated_at")
+        .select("id,notebook_id,author_id,content,mood,mood_tone,mood_words,diary_date,weather,doodle_url,created_at,updated_at")
         .eq("notebook_id", notebook.id)
         .order("diary_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
@@ -207,6 +215,7 @@ function App() {
         moodWords: parseMoodWords(entry.mood_words),
         diaryDate: entry.diary_date || localDateKey(new Date(entry.created_at)),
         weather: entry.weather,
+        doodleUrl: entry.doodle_url ?? null,
         createdAt: entry.created_at,
         responses: stamps
           .filter((stamp: any) => stamp.diary_id === entry.id)
@@ -281,7 +290,7 @@ function App() {
     }
   }
 
-  async function addDiary(text: string, mood: Status | null, diaryDate: string, weather: WeatherKey | null, moodTone: MoodTone | null, moodWords: string[]) {
+  async function addDiary(text: string, mood: Status | null, diaryDate: string, weather: WeatherKey | null, moodTone: MoodTone | null, moodWords: string[], doodleUrl: string | null) {
     if (!supabase || !activeNotebook || !session?.user) return;
     const { error: insertError } = await supabase.from("diary_entries").insert({
       notebook_id: activeNotebook.id,
@@ -292,13 +301,55 @@ function App() {
       mood_words: moodWords.length ? moodWords : null,
       diary_date: diaryDate,
       weather,
+      doodle_url: doodleUrl,
     });
     if (insertError) {
       setError(errorMessage(insertError));
-      return;
+      throw insertError;
     }
     setTab("feed");
     await loadNotebookData(activeNotebook);
+  }
+
+  async function uploadDoodleImage(dataUrl: string) {
+    if (!supabase || !session?.user) throw new Error("还没登录，不能保存涂鸦");
+    const blob = dataUrlToBlob(dataUrl);
+    const path = `${session.user.id}/${Date.now()}.png`;
+    const { error: uploadError } = await supabase.storage.from("doodles").upload(path, blob, {
+      contentType: "image/png",
+      upsert: false,
+    });
+    if (uploadError) throw uploadError;
+    const { data } = supabase.storage.from("doodles").getPublicUrl(path);
+    return data.publicUrl;
+  }
+
+  async function saveDoodleToApp(dataUrl: string) {
+    if (!supabase || !activeNotebook || !session?.user) throw new Error("还没进入小本子，不能保存涂鸦");
+    const imageUrl = await uploadDoodleImage(dataUrl);
+    const { error: insertError } = await supabase.from("doodles").insert({
+      user_id: session.user.id,
+      notebook_id: activeNotebook.id,
+      image_url: imageUrl,
+    });
+    if (insertError) throw insertError;
+    return imageUrl;
+  }
+
+  async function loadMyDoodles() {
+    if (!supabase || !session?.user) return [];
+    const { data, error: doodlesError } = await supabase
+      .from("doodles")
+      .select("id,image_url,created_at")
+      .eq("user_id", session.user.id)
+      .order("created_at", { ascending: false })
+      .limit(18);
+    if (doodlesError) throw doodlesError;
+    return (data ?? []).map((item: any) => ({
+      id: item.id,
+      imageUrl: item.image_url,
+      createdAt: item.created_at,
+    })) as SavedDoodle[];
   }
 
   async function addFollowUp(diaryId: string, text: string) {
@@ -477,6 +528,7 @@ function App() {
                           onNote={(text) => addPaperNote(diary.id, text)}
                           onFollowUp={(text) => addFollowUp(diary.id, text)}
                           onHighlight={(start, end) => addHighlight(diary.id, start, end)}
+                          onDoodlePreview={setDoodlePreview}
                         />
                       ))}
                     </div>
@@ -487,7 +539,15 @@ function App() {
           </section>
         )}
 
-        {tab === "write" && <WriteView onSubmit={addDiary} />}
+        {tab === "write" && (
+          <WriteView
+            onSubmit={addDiary}
+            profile={profile}
+            onUploadDoodle={uploadDoodleImage}
+            onSaveDoodle={saveDoodleToApp}
+            onLoadDoodles={loadMyDoodles}
+          />
+        )}
 
         {tab === "friends" && (
           <section className="stack">
@@ -522,6 +582,7 @@ function App() {
                 onNote={(text) => addPaperNote(diary.id, text)}
                 onFollowUp={(text) => addFollowUp(diary.id, text)}
                 onHighlight={(start, end) => addHighlight(diary.id, start, end)}
+                onDoodlePreview={setDoodlePreview}
               />
             ))}
           </section>
@@ -536,6 +597,8 @@ function App() {
         <NavButton active={tab === "friends"} icon={<UserRound size={19} />} label="朋友" onClick={() => setTab("friends")} />
         <NavButton active={tab === "week"} icon={<CalendarDays size={19} />} label="本周" onClick={() => setTab("week")} />
       </nav>
+
+      {doodlePreview && <DoodlePreview imageUrl={doodlePreview} onClose={() => setDoodlePreview(null)} />}
     </div>
   );
 }
@@ -551,6 +614,7 @@ function DiaryEntry({
   onNote,
   onFollowUp,
   onHighlight,
+  onDoodlePreview,
 }: {
   diary: Diary;
   author: Member;
@@ -562,6 +626,7 @@ function DiaryEntry({
   onNote: (text: string) => void;
   onFollowUp: (text: string) => void;
   onHighlight: (start: number, end: number) => void;
+  onDoodlePreview: (imageUrl: string) => void;
 }) {
   const [composer, setComposer] = useState<Composer>(null);
   const [openNote, setOpenNote] = useState<number | null>(null);
@@ -632,6 +697,11 @@ function DiaryEntry({
       <MoodLine moodTone={diary.moodTone} moodWords={diary.moodWords} fallbackMood={diary.status} />
 
       <div className="diary-body">
+        {diary.doodleUrl && (
+          <button className="diary-doodle-sticker" type="button" onClick={() => onDoodlePreview(diary.doodleUrl!)}>
+            <img src={diary.doodleUrl} alt="这页夹着一张涂鸦便利贴" />
+          </button>
+        )}
         <p className="diary-text" ref={textRef} onMouseUp={handleTextSelection} onKeyUp={handleTextSelection}>
           <HighlightedText text={diary.text} highlights={diary.highlights} />
           {highlightBubble && (
@@ -956,7 +1026,19 @@ function ColorPicker({ selected, onSelect }: { selected: UserColorKey; onSelect:
   );
 }
 
-function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null, diaryDate: string, weather: WeatherKey | null, moodTone: MoodTone | null, moodWords: string[]) => void }) {
+function WriteView({
+  onSubmit,
+  profile,
+  onUploadDoodle,
+  onSaveDoodle,
+  onLoadDoodles,
+}: {
+  onSubmit: (text: string, mood: Status | null, diaryDate: string, weather: WeatherKey | null, moodTone: MoodTone | null, moodWords: string[], doodleUrl: string | null) => Promise<void>;
+  profile: Profile | null;
+  onUploadDoodle: (dataUrl: string) => Promise<string>;
+  onSaveDoodle: (dataUrl: string) => Promise<string>;
+  onLoadDoodles: () => Promise<SavedDoodle[]>;
+}) {
   const [text, setText] = useState("");
   const [diaryDate, setDiaryDate] = useState(() => localDateKey(new Date()));
   const [weather, setWeather] = useState<WeatherKey | null>(null);
@@ -966,23 +1048,41 @@ function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null,
   const [moodTone, setMoodTone] = useState<MoodTone | null>(null);
   const [moodSliderValue, setMoodSliderValue] = useState(50);
   const [moodWords, setMoodWords] = useState<string[]>([]);
+  const [doodleOpen, setDoodleOpen] = useState(false);
+  const [doodleImage, setDoodleImage] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [writeMessage, setWriteMessage] = useState<string | null>(null);
   const currentPrompt = customPrompt.trim() ? formatPromptTag(customPrompt) : selectedPrompt ? formatPromptTag(selectedPrompt) : null;
   const shownMoodTone = moodTone ?? moodToneFromValue(moodSliderValue);
   const activeMoodOption = getMoodToneOption(shownMoodTone) ?? moodToneOptions[2];
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!text.trim() || !diaryDate) return;
-    onSubmit(text.trim(), null, diaryDate, weather, moodTone, moodWords);
-    setText("");
-    setDiaryDate(localDateKey(new Date()));
-    setWeather(null);
-    setSelectedPrompt(null);
-    setCustomPrompt("");
-    setCustomPromptOpen(false);
-    setMoodTone(null);
-    setMoodSliderValue(50);
-    setMoodWords([]);
+    if ((!text.trim() && !doodleImage) || !diaryDate || submitting) return;
+    setSubmitting(true);
+    setWriteMessage(null);
+    try {
+      let finalDoodleUrl = doodleImage;
+      if (finalDoodleUrl?.startsWith("data:")) {
+        finalDoodleUrl = await onUploadDoodle(finalDoodleUrl);
+      }
+      await onSubmit(text.trim(), null, diaryDate, weather, moodTone, moodWords, finalDoodleUrl);
+      setText("");
+      setDiaryDate(localDateKey(new Date()));
+      setWeather(null);
+      setSelectedPrompt(null);
+      setCustomPrompt("");
+      setCustomPromptOpen(false);
+      setMoodTone(null);
+      setMoodSliderValue(50);
+      setMoodWords([]);
+      setDoodleOpen(false);
+      setDoodleImage(null);
+    } catch (submitError) {
+      setWriteMessage(errorMessage(submitError));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function choosePrompt(prompt: string) {
@@ -1045,41 +1145,52 @@ function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null,
             </div>
           </div>
         </div>
-        <div className="compose-paper">
-          <div className="prompt-field">
-            <div className="prompt-strip">
-              {promptOptions.map((prompt) => (
+        <div className={`compose-paper-stage ${doodleOpen ? "doodle-is-open" : ""}`}>
+          <div className="compose-paper">
+            <div className="prompt-field">
+              <div className="prompt-strip">
+                {promptOptions.map((prompt) => (
+                  <button
+                    type="button"
+                    key={prompt}
+                    className={selectedPrompt === prompt && !customPrompt.trim() ? "selected" : ""}
+                    aria-pressed={selectedPrompt === prompt && !customPrompt.trim()}
+                    onClick={() => choosePrompt(prompt)}
+                  >
+                    <span className="prompt-option-text">{prompt}</span>
+                  </button>
+                ))}
                 <button
                   type="button"
-                  key={prompt}
-                  className={selectedPrompt === prompt && !customPrompt.trim() ? "selected" : ""}
-                  aria-pressed={selectedPrompt === prompt && !customPrompt.trim()}
-                  onClick={() => choosePrompt(prompt)}
+                  className={`custom-prompt-toggle ${customPrompt.trim() ? "selected" : ""}`}
+                  aria-pressed={Boolean(customPrompt.trim())}
+                  onClick={() => setCustomPromptOpen((value) => !value)}
                 >
-                  <span className="prompt-option-text">{prompt}</span>
+                  #自定义
                 </button>
-              ))}
-              <button
-                type="button"
-                className={`custom-prompt-toggle ${customPrompt.trim() ? "selected" : ""}`}
-                aria-pressed={Boolean(customPrompt.trim())}
-                onClick={() => setCustomPromptOpen((value) => !value)}
-              >
-                #自定义
-              </button>
-              {currentPrompt && customPrompt.trim() && <small className="current-custom-prompt">{currentPrompt}</small>}
+                {currentPrompt && customPrompt.trim() && <small className="current-custom-prompt">{currentPrompt}</small>}
+              </div>
+              {customPromptOpen && (
+                <input
+                  className="custom-prompt-input"
+                  value={customPrompt}
+                  onChange={(event) => updateCustomPrompt(event.target.value)}
+                  placeholder="比如 #今天风很好"
+                  maxLength={24}
+                />
+              )}
             </div>
-            {customPromptOpen && (
-              <input
-                className="custom-prompt-input"
-                value={customPrompt}
-                onChange={(event) => updateCustomPrompt(event.target.value)}
-                placeholder="比如 #今天风很好"
-                maxLength={24}
-              />
-            )}
+            <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="想说鼠莫？" />
           </div>
-          <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="想说鼠莫？" />
+          <DoodleComposer
+            open={doodleOpen}
+            onOpenChange={setDoodleOpen}
+            image={doodleImage}
+            onImageChange={setDoodleImage}
+            profile={profile}
+            onSaveDoodle={onSaveDoodle}
+            onLoadDoodles={onLoadDoodles}
+          />
         </div>
         <div className="mood-temperature">
           <div className="mood-temperature-head">
@@ -1119,9 +1230,318 @@ function WriteView({ onSubmit }: { onSubmit: (text: string, mood: Status | null,
             </div>
           </div>
         </div>
-        <button className="publish-button">写进本子</button>
+        <button className="publish-button" disabled={submitting}>{submitting ? "正在夹进本子" : "写进本子"}</button>
+        {writeMessage && <p className="small-note-line">{writeMessage}</p>}
       </form>
     </section>
+  );
+}
+
+function DoodleComposer({
+  open,
+  onOpenChange,
+  image,
+  onImageChange,
+  profile,
+  onSaveDoodle,
+  onLoadDoodles,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  image: string | null;
+  onImageChange: (image: string | null) => void;
+  profile: Profile | null;
+  onSaveDoodle: (dataUrl: string) => Promise<string>;
+  onLoadDoodles: () => Promise<SavedDoodle[]>;
+}) {
+  const color = getUserColor(profile?.color_key);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [savedDoodles, setSavedDoodles] = useState<SavedDoodle[]>([]);
+  const [loadingSaved, setLoadingSaved] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function closeWhenOutside(event: PointerEvent) {
+      const target = event.target as Node;
+      if (drawerRef.current?.contains(target)) return;
+      onOpenChange(false);
+    }
+
+    document.addEventListener("pointerdown", closeWhenOutside);
+    return () => document.removeEventListener("pointerdown", closeWhenOutside);
+  }, [open, onOpenChange]);
+
+  async function toggleSavedDoodles() {
+    const nextOpen = !savedOpen;
+    setSavedOpen(nextOpen);
+    if (!nextOpen || savedDoodles.length) return;
+    setLoadingSaved(true);
+    setMessage(null);
+    try {
+      setSavedDoodles(await onLoadDoodles());
+    } catch (loadError) {
+      setSavedDoodles([]);
+      setMessage(isMissingDoodlesTableError(loadError) ? "还没有存过涂鸦。" : "暂时没翻到以前的涂鸦。");
+    } finally {
+      setLoadingSaved(false);
+    }
+  }
+
+  return (
+    <section className={`doodle-compose ${open ? "is-open" : ""} ${image ? "has-doodle" : ""}`} style={colorVars(color, "doodle") as React.CSSProperties}>
+      {!open && (
+        <div className="doodle-peek-zone">
+          <div className="doodle-hand-cue" aria-hidden="true">
+            <span>可以涂一下</span>
+            <svg viewBox="0 0 92 44" focusable="false">
+              <path d="M4 18c20-7 43 1 74 14" />
+              <path d="M78 32c-8-1-14 1-20 5" />
+              <path d="M78 32c-4-7-9-12-17-16" />
+            </svg>
+          </div>
+          <button type="button" className="doodle-peek" aria-label="涂一下" onClick={() => onOpenChange(true)}>
+            <span />
+          </button>
+        </div>
+      )}
+
+      {open && (
+        <div className="doodle-drawer" ref={drawerRef}>
+          <div className="doodle-sheet-head">
+            <span>涂一下</span>
+          </div>
+          <DoodlePad
+            color={color}
+            image={image}
+            onImageChange={onImageChange}
+            onSaveDoodle={onSaveDoodle}
+            onSaved={(url) => {
+              onImageChange(url);
+              setMessage("已经存进本子，下次也能用了。");
+              setSavedDoodles((items) => [{ id: url, imageUrl: url, createdAt: new Date().toISOString() }, ...items]);
+            }}
+            onMessage={setMessage}
+            libraryControl={
+              <button type="button" onClick={toggleSavedDoodles}>
+                用以前涂过的
+              </button>
+            }
+          />
+          {message && <small className="doodle-message">{message}</small>}
+          {savedOpen && (
+            <div className="doodle-library">
+              {loadingSaved && <p>正在翻以前的小涂鸦。</p>}
+              {!loadingSaved && savedDoodles.length === 0 && <p>还没有存过涂鸦。</p>}
+              {!loadingSaved && savedDoodles.length > 0 && (
+                <div className="doodle-library-grid">
+                  {savedDoodles.map((doodle) => (
+                    <button
+                      type="button"
+                      key={doodle.id}
+                      onClick={() => {
+                        onImageChange(doodle.imageUrl);
+              setMessage("这张已经夹到这页了。");
+                      }}
+                    >
+                      <img src={doodle.imageUrl} alt="以前涂过的一张便利贴" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DoodlePad({
+  color,
+  image,
+  onImageChange,
+  onSaveDoodle,
+  onSaved,
+  onMessage,
+  libraryControl,
+}: {
+  color: ReturnType<typeof getUserColor>;
+  image: string | null;
+  onImageChange: (image: string | null) => void;
+  onSaveDoodle: (dataUrl: string) => Promise<string>;
+  onSaved: (url: string) => void;
+  onMessage: (message: string | null) => void;
+  libraryControl: React.ReactNode;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lastPoint = useRef<{ x: number; y: number } | null>(null);
+  const drawing = useRef(false);
+  const [history, setHistory] = useState<(string | null)[]>([]);
+  const [saving, setSaving] = useState(false);
+  const size = 640;
+
+  useEffect(() => {
+    restoreCanvas(image);
+  }, [image, color.paperSoft]);
+
+  function prepareCanvas() {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = size * ratio;
+    canvas.height = size * ratio;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.fillStyle = color.paperSoft || color.paper;
+    context.fillRect(0, 0, size, size);
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = "#332b25";
+    context.lineWidth = 3;
+    return context;
+  }
+
+  function restoreCanvas(source: string | null) {
+    const context = prepareCanvas();
+    if (!context || !source) return;
+    const imageElement = new window.Image();
+    imageElement.crossOrigin = "anonymous";
+    imageElement.onload = () => {
+      context.drawImage(imageElement, 0, 0, size, size);
+    };
+    imageElement.src = source;
+  }
+
+  function pointFor(event: React.PointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * size,
+      y: ((event.clientY - rect.top) / rect.height) * size,
+    };
+  }
+
+  function exportImage() {
+    return canvasRef.current?.toDataURL("image/png") ?? "";
+  }
+
+  function startDrawing(event: React.PointerEvent<HTMLCanvasElement>) {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setHistory((items) => [...items.slice(-24), image]);
+    drawing.current = true;
+    lastPoint.current = pointFor(event);
+    const context = canvasRef.current?.getContext("2d");
+    if (!context || !lastPoint.current) return;
+    context.beginPath();
+    context.arc(lastPoint.current.x, lastPoint.current.y, 1.25, 0, Math.PI * 2);
+    context.fillStyle = "#332b25";
+    context.fill();
+  }
+
+  function draw(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawing.current || !lastPoint.current) return;
+    event.preventDefault();
+    const context = canvasRef.current?.getContext("2d");
+    if (!context) return;
+    const nextPoint = pointFor(event);
+    context.beginPath();
+    context.moveTo(lastPoint.current.x, lastPoint.current.y);
+    context.lineTo(nextPoint.x, nextPoint.y);
+    context.stroke();
+    lastPoint.current = nextPoint;
+  }
+
+  function stopDrawing(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawing.current) return;
+    event.preventDefault();
+    drawing.current = false;
+    lastPoint.current = null;
+    onImageChange(exportImage());
+  }
+
+  function undo() {
+    const previous = history[history.length - 1] ?? null;
+    setHistory((items) => items.slice(0, -1));
+    onImageChange(previous);
+    restoreCanvas(previous);
+    onMessage(previous ? "撤回到上一笔了。" : "这张便利贴又空了。");
+  }
+
+  function clear() {
+    setHistory((items) => [...items.slice(-24), image]);
+    onImageChange(null);
+    restoreCanvas(null);
+    onMessage("已经清空。");
+  }
+
+  function saveLocal() {
+    const dataUrl = exportImage();
+    if (!dataUrl) return;
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = `our-diary-doodle-${localDateKey(new Date())}.png`;
+    if (typeof link.download === "string") {
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      onMessage("已经保存到本地。");
+    } else {
+      window.open(dataUrl, "_blank");
+    }
+  }
+
+  async function saveApp() {
+    const dataUrl = exportImage();
+    if (!dataUrl || saving) return;
+    setSaving(true);
+    onMessage(null);
+    try {
+      const url = await onSaveDoodle(dataUrl);
+      onSaved(url);
+    } catch (saveError) {
+      onMessage(isMissingDoodlesTableError(saveError) ? "涂鸦库还没准备好，先存到本地也可以。" : errorMessage(saveError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="doodle-pad">
+      <div className="doodle-tools doodle-tools-left">
+        <button type="button" onClick={undo} disabled={history.length === 0}>撤一下</button>
+        <button type="button" onClick={clear}>清空</button>
+      </div>
+      <canvas
+        ref={canvasRef}
+        aria-label="涂一下便利贴"
+        onPointerDown={startDrawing}
+        onPointerMove={draw}
+        onPointerUp={stopDrawing}
+        onPointerCancel={stopDrawing}
+      />
+      <div className="doodle-tools doodle-tools-right">
+        <button type="button" onClick={saveLocal}>存到本地</button>
+        <button type="button" onClick={saveApp} disabled={saving}>{saving ? "存着呢" : "存进本子"}</button>
+        {libraryControl}
+      </div>
+    </div>
+  );
+}
+
+function DoodlePreview({ imageUrl, onClose }: { imageUrl: string; onClose: () => void }) {
+  return (
+    <div className="doodle-preview-overlay" onClick={onClose}>
+      <div className="doodle-preview-note" onClick={(event) => event.stopPropagation()}>
+        <button type="button" onClick={onClose}>合上</button>
+        <img src={imageUrl} alt="放大的涂鸦便利贴" />
+      </div>
+    </div>
   );
 }
 
@@ -1356,6 +1776,22 @@ function colorVars(color = defaultUserColor, prefix = "person") {
     [`--${prefix}-ambient`]: color.ambient,
     [`--${prefix}-highlight`]: color.highlight,
   };
+}
+
+function dataUrlToBlob(dataUrl: string) {
+  const [metadata, base64] = dataUrl.split(",");
+  const mime = metadata.match(/data:(.*);base64/)?.[1] ?? "image/png";
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mime });
+}
+
+function isMissingDoodlesTableError(error: unknown) {
+  const message = errorMessage(error);
+  return message.includes("public.doodles") || message.includes("schema cache") || message.includes("Could not find the table");
 }
 
 const ambientPositions = [
