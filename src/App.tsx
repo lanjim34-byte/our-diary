@@ -336,6 +336,21 @@ function App() {
     await loadNotebookData(activeNotebook);
   }
 
+  async function deleteDiary(diaryId: string) {
+    if (!supabase || !session?.user) return;
+    const { error: deleteError } = await supabase
+      .from("diary_entries")
+      .delete()
+      .eq("id", diaryId)
+      .eq("author_id", session.user.id);
+    if (deleteError) {
+      setError(errorMessage(deleteError));
+      throw deleteError;
+    }
+    setDiaries((current) => current.filter((diary) => diary.id !== diaryId));
+    setOpenDiaryId((current) => (current === diaryId ? null : current));
+  }
+
   async function uploadDoodleImage(dataUrl: string) {
     if (!supabase || !session?.user) throw new Error("还没登录，不能保存涂鸦");
     const blob = dataUrlToBlob(dataUrl);
@@ -581,6 +596,7 @@ function App() {
                           onFollowUp={(text) => addFollowUp(diary.id, text)}
                           onHighlight={(start, end) => addHighlight(diary.id, start, end)}
                           onDoodlePreview={setDoodlePreview}
+                          onDelete={() => deleteDiary(diary.id)}
                         />
                       ))}
                     </div>
@@ -635,6 +651,7 @@ function App() {
                 onFollowUp={(text) => addFollowUp(diary.id, text)}
                 onHighlight={(start, end) => addHighlight(diary.id, start, end)}
                 onDoodlePreview={setDoodlePreview}
+                onDelete={() => deleteDiary(diary.id)}
               />
             ))}
           </section>
@@ -803,6 +820,7 @@ function DiaryEntry({
   onFollowUp,
   onHighlight,
   onDoodlePreview,
+  onDelete,
 }: {
   diary: Diary;
   author: Member;
@@ -815,6 +833,7 @@ function DiaryEntry({
   onFollowUp: (text: string) => void;
   onHighlight: (start: number, end: number) => void;
   onDoodlePreview: (imageUrl: string) => void;
+  onDelete: () => Promise<void>;
 }) {
   const [composer, setComposer] = useState<Composer>(null);
   const [openNote, setOpenNote] = useState<number | null>(null);
@@ -824,6 +843,16 @@ function DiaryEntry({
   const [isTorn, setIsTorn] = useState(false);
   const textRef = useRef<HTMLParagraphElement>(null);
   const isAuthor = diary.authorId === currentUserId;
+
+  async function tearPage() {
+    setIsTorn(true);
+    setComposer(null);
+    try {
+      await onDelete();
+    } catch {
+      setIsTorn(false);
+    }
+  }
 
   function toggleComposer(next: Composer) {
     setComposer((current) => (current === next ? null : next));
@@ -927,7 +956,7 @@ function DiaryEntry({
                 <button onClick={() => toggleComposer("stamp")}>盖个小印章</button>
                 <button onClick={() => toggleComposer("note")}>夹一张小纸条</button>
                 {isAuthor && <button onClick={() => toggleComposer("follow")}>再补一句</button>}
-                {isAuthor && <button onClick={() => { setIsTorn(true); setComposer(null); }}>撕掉这一页</button>}
+                {isAuthor && <button onClick={tearPage}>撕掉这一页</button>}
               </div>
 
               {composer === "stamp" && (
