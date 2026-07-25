@@ -2320,10 +2320,6 @@ small {
   background: var(--interaction-active-soft);
 }
 
-.bottom-nav button.primary {
-  color: color-mix(in srgb, var(--interaction-border) 90%, var(--ink-soft));
-}
-
 .doodle-preview-overlay {
   position: fixed;
   inset: 0;

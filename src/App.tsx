@@ -90,6 +90,7 @@ type SavedDoodle = {
 
 const statusOptions: Status[] = ["开心", "普通", "有点累", "卡住了", "想聊天", "需要安静"];
 const promptOptions = ["碎碎念", "奇思", "我跟你讲哦…", "说不清", "想被听见"];
+const tornPageMarker = "__OUR_DIARY_TORN_PAGE__";
 const stampOptions = [
   { name: "爱心", hint: "关心", icon: Heart },
   { name: "星星", hint: "鼓励", icon: Star },
@@ -338,17 +339,18 @@ function App() {
 
   async function deleteDiary(diaryId: string) {
     if (!supabase || !session?.user) return;
-    const { error: deleteError } = await supabase
+    const { error: updateError } = await supabase
       .from("diary_entries")
-      .delete()
+      .update({ content: tornPageMarker })
       .eq("id", diaryId)
       .eq("author_id", session.user.id);
-    if (deleteError) {
-      setError(errorMessage(deleteError));
-      throw deleteError;
+    if (updateError) {
+      setError(errorMessage(updateError));
+      throw updateError;
     }
-    setDiaries((current) => current.filter((diary) => diary.id !== diaryId));
-    setOpenDiaryId((current) => (current === diaryId ? null : current));
+    setDiaries((current) =>
+      current.map((diary) => (diary.id === diaryId ? { ...diary, text: tornPageMarker } : diary))
+    );
   }
 
   async function uploadDoodleImage(dataUrl: string) {
@@ -840,7 +842,7 @@ function DiaryEntry({
   const [noteText, setNoteText] = useState("");
   const [followText, setFollowText] = useState("");
   const [highlightBubble, setHighlightBubble] = useState<HighlightBubble>(null);
-  const [isTorn, setIsTorn] = useState(false);
+  const [isTorn, setIsTorn] = useState(isTornDiary(diary));
   const textRef = useRef<HTMLParagraphElement>(null);
   const isAuthor = diary.authorId === currentUserId;
 
@@ -1827,7 +1829,16 @@ function countDiaryWords(diaries: Diary[]) {
 }
 
 function countTextCharacters(text: string) {
+  if (isTornText(text)) return 0;
   return Array.from(text.replace(/\s/g, "")).length;
+}
+
+function isTornDiary(diary: Diary) {
+  return isTornText(diary.text);
+}
+
+function isTornText(text: string) {
+  return text === tornPageMarker;
 }
 
 function generateWeeklySummary(diaries: Diary[], members: Member[]) {
@@ -2440,7 +2451,7 @@ function normalizeHighlights(highlights: HighlightRange[], textLength: number) {
 function extractKeywords(diaries: Diary[]) {
   const text = diaries
     .flatMap((diary) => [
-      diary.text,
+      isTornDiary(diary) ? "" : diary.text,
       ...diary.followUps.map((followup) => followup.text),
       ...diary.comments.map((note) => note.text),
     ])
