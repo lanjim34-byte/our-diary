@@ -1741,12 +1741,14 @@ function DoodlePreview({ imageUrl, onClose }: { imageUrl: string; onClose: () =>
 }
 
 function WeekView({ diaries, members }: { diaries: Diary[]; members: Member[] }) {
-  if (diaries.length < 2) {
-    return <EmptyState title="这一周还没留下太多字" text="多写几笔之后，这里会轻轻收拢大家的近况。" />;
-  }
-
-  const activeAuthors = [...new Set(diaries.map((diary) => memberFor(members, diary.authorId).profile.display_name))];
-  const tiredCount = diaries.filter((diary) => diary.status === "有点累" || diary.status === "卡住了").length;
+  const [showNotebookWords, setShowNotebookWords] = useState(false);
+  const weekRange = currentWeekRange();
+  const thisWeekDiaries = diaries.filter((diary) => isDiaryInRange(diary, weekRange.start, weekRange.end));
+  const activeAuthors = [...new Set(thisWeekDiaries.map((diary) => memberFor(members, diary.authorId).profile.display_name))];
+  const tiredCount = thisWeekDiaries.filter((diary) => diary.status === "有点累" || diary.status === "卡住了").length;
+  const weeklyCharacterCount = countDiaryWords(thisWeekDiaries);
+  const notebookCharacterCount = countDiaryWords(diaries);
+  const weeklySummary = generateWeeklySummary(diaries, members);
 
   return (
     <section className="week-view stack">
@@ -1754,22 +1756,177 @@ function WeekView({ diaries, members }: { diaries: Diary[]; members: Member[] })
         <HeartHandshake size={28} />
         <div>
           <p className="eyebrow">翻到这一周</p>
-          <h2>大家都还在慢慢往前走</h2>
+          <h2>{weeklySummary}</h2>
         </div>
       </article>
-      <div className="summary-grid">
-        <Summary title="这周谁写过" text={activeAuthors.join("、")} />
-        <Summary title="留下了多少字" text={`${diaries.length} 条日记被放进本子里。`} />
-        <Summary title="需要被照看的状态" text={tiredCount ? `有 ${tiredCount} 条日记提到累或卡住。` : "这周没有太多沉重的状态。"} />
-        <Summary title="这周的小词" text={extractKeywords(diaries)} />
-      </div>
+      {diaries.length < 2 ? (
+        <EmptyState title="这一周还没留下太多字" text="多写几笔之后，这里会轻轻收拢大家的近况。" />
+      ) : (
+        <div className="summary-grid">
+          <Summary title="这周谁写过" text={activeAuthors.join("、") || "还没有人落笔。"} />
+          <Summary
+            title="留下了多少字"
+            text={
+              showNotebookWords
+                ? `整本小本子里一共有 ${notebookCharacterCount} 个字。`
+                : weeklyCharacterCount
+                  ? `${weeklyCharacterCount} 个字被放进本子里。`
+                  : "这周还没留下新的字。"
+            }
+            onClick={() => setShowNotebookWords((value) => !value)}
+          />
+          <Summary title="需要被照看的状态" text={tiredCount ? `有 ${tiredCount} 条日记提到累或卡住。` : "这周没有太多沉重的状态。"} />
+          <Summary title="这周的小词" text={extractKeywords(thisWeekDiaries)} />
+        </div>
+      )}
     </section>
   );
 }
 
-function Summary({ title, text }: { title: string; text: string }) {
+function currentWeekRange() {
+  const start = startOfLocalWeek(new Date());
+  return { start, end: addDays(start, 7) };
+}
+
+function countDiaryWords(diaries: Diary[]) {
+  return diaries.reduce((total, diary) => {
+    const diaryTextCount = countTextCharacters(diary.text);
+    const followUpCount = diary.followUps.reduce((count, followup) => count + countTextCharacters(followup.text), 0);
+    const noteCount = diary.comments.reduce((count, note) => count + countTextCharacters(note.text), 0);
+    return total + diaryTextCount + followUpCount + noteCount;
+  }, 0);
+}
+
+function countTextCharacters(text: string) {
+  return Array.from(text.replace(/\s/g, "")).length;
+}
+
+function generateWeeklySummary(diaries: Diary[], members: Member[]) {
+  const now = new Date();
+  const thisWeekStart = startOfLocalWeek(now);
+  const nextWeekStart = addDays(thisWeekStart, 7);
+  const lastWeekStart = addDays(thisWeekStart, -7);
+  const thisWeekDiaries = diaries.filter((diary) => isDiaryInRange(diary, thisWeekStart, nextWeekStart));
+  const lastWeekDiaries = diaries.filter((diary) => isDiaryInRange(diary, lastWeekStart, thisWeekStart));
+  const activeAuthorCount = new Set(thisWeekDiaries.map((diary) => diary.authorId)).size;
+  const noteCount = thisWeekDiaries.reduce((count, diary) => count + diary.comments.filter((note) => isDateInRange(note.createdAt, thisWeekStart, nextWeekStart)).length, 0);
+  const stampCount = thisWeekDiaries.reduce((count, diary) => count + diary.responses.filter((stamp) => isDateInRange(stamp.createdAt, thisWeekStart, nextWeekStart)).length, 0);
+
+  if (activeAuthorCount >= Math.min(2, Math.max(1, members.length))) {
+    return pickWeeklyLine([
+      "这一周，大家都来本子里写了一笔。",
+      "这一页，又留下了几个人的字迹。",
+      "这周，本子里出现了大家的新笔迹。",
+    ], thisWeekDiaries.length + activeAuthorCount + noteCount + stampCount);
+  }
+
+  const topTag = topWeeklyTag(thisWeekDiaries);
+  if (topTag) {
+    const tagLine = weeklyTagLine(topTag);
+    if (tagLine) return tagLine;
+  }
+
+  if (thisWeekDiaries.length > lastWeekDiaries.length) {
+    return pickWeeklyLine(["这周，多了一些想留下的话。", "这一页，多了些新的痕迹。"], thisWeekDiaries.length);
+  }
+
+  if (lastWeekDiaries.length > 0 && thisWeekDiaries.length < lastWeekDiaries.length) {
+    return pickWeeklyLine(["这周，本子安静了一些。", "这一周，字迹少了一点。"], lastWeekDiaries.length - thisWeekDiaries.length);
+  }
+
+  const moodLine = weeklyMoodLine(thisWeekDiaries);
+  if (moodLine) return moodLine;
+
+  if (noteCount || stampCount) return "这周，有人轻轻回应了几笔。";
+  return thisWeekDiaries.length ? "本子还在慢慢写满。" : "这一页，还在等待新的痕迹。";
+}
+
+function startOfLocalWeek(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  const day = next.getDay() || 7;
+  next.setDate(next.getDate() - day + 1);
+  return next;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function isDiaryInRange(diary: Diary, start: Date, end: Date) {
+  const date = new Date(`${diary.diaryDate || localDateKey(new Date(diary.createdAt))}T00:00:00`);
+  return date >= start && date < end;
+}
+
+function isDateInRange(value: string | undefined, start: Date, end: Date) {
+  if (!value) return false;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) && date >= start && date < end;
+}
+
+function topWeeklyTag(diaries: Diary[]) {
+  const counts = new Map<string, number>();
+  diaries.forEach((diary) => {
+    const tag = normalizeWeeklyTag((diary as any).entry_tag ?? (diary as any).entryTag ?? (diary as any).prompt_tag ?? (diary as any).promptTag ?? (diary as any).tag);
+    if (!tag) return;
+    counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  });
+  return [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? null;
+}
+
+function normalizeWeeklyTag(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().replace(/^#/, "");
+  return trimmed || null;
+}
+
+function weeklyTagLine(tag: string) {
+  if (tag === "想被听见") return "这一周，有些小事想被听见。";
+  if (tag === "碎碎念") return "这一周，装下不少小念头。";
+  if (tag === "奇思") return "这周，留下了几枚奇思。";
+  if (tag === "说不清") return "这一周，也有说不清的心绪。";
+  if (tag === "我跟你讲哦…") return "这周，有些话想慢慢讲。";
+  return null;
+}
+
+function weeklyMoodLine(diaries: Diary[]) {
+  const tones = diaries.map((diary) => diary.moodTone).filter(Boolean) as MoodTone[];
+  if (!tones.length) return null;
+  const scores: Record<MoodTone, number> = { very_dark: -2, dark: -1, middle: 0, bright: 1, very_bright: 2 };
+  const total = tones.reduce((sum, tone) => sum + scores[tone], 0);
+  const brightCount = tones.filter((tone) => scores[tone] > 0).length;
+  const darkCount = tones.filter((tone) => scores[tone] < 0).length;
+  const average = total / tones.length;
+
+  if (brightCount > 0 && darkCount > 0 && Math.abs(average) < 0.7) {
+    return "这一周，有亮光也有小情绪。";
+  }
+  if (average >= 0.7) return "这一周，留下更多亮亮痕迹。";
+  if (average <= -0.7) return "这一周，也留下了一点疲惫。";
+  return "这一周，心绪在中间晃晃。";
+}
+
+function pickWeeklyLine(lines: string[], seed: number) {
+  return lines[Math.abs(seed) % lines.length];
+}
+
+function Summary({ title, text, onClick }: { title: string; text: string; onClick?: () => void }) {
+  function handleKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    if (!onClick || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    onClick();
+  }
+
   return (
-    <article className="summary-card">
+    <article
+      className={`summary-card ${onClick ? "summary-card-secret" : ""}`}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={handleKeyDown}
+    >
       <h3>{title}</h3>
       <p>{text}</p>
     </article>
@@ -2252,10 +2409,78 @@ function normalizeHighlights(highlights: HighlightRange[], textLength: number) {
 }
 
 function extractKeywords(diaries: Diary[]) {
-  const text = diaries.map((diary) => diary.text).join("");
-  const words = ["今天", "一点", "朋友", "晚上", "最近", "舒服", "慢慢", "本子"].filter((word) => text.includes(word));
+  const text = diaries
+    .flatMap((diary) => [
+      diary.text,
+      ...diary.followUps.map((followup) => followup.text),
+      ...diary.comments.map((note) => note.text),
+    ])
+    .join(" ");
+  const counts = new Map<string, number>();
+
+  text.match(/[\u4e00-\u9fff]+|[a-zA-Z0-9]+/g)?.forEach((part) => {
+    if (/^[a-zA-Z0-9]+$/.test(part)) {
+      const word = part.toLowerCase();
+      if (word.length > 1 && !keywordStopWords.has(word)) counts.set(word, (counts.get(word) ?? 0) + 1);
+      return;
+    }
+
+    for (let index = 0; index < part.length - 1; index += 1) {
+      const word = part.slice(index, index + 2);
+      if (!keywordStopWords.has(word)) counts.set(word, (counts.get(word) ?? 0) + 1);
+    }
+  });
+
+  const words = [...counts.entries()]
+    .filter(([, count]) => count > 1)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], "zh-Hans-CN"))
+    .slice(0, 4)
+    .map(([word]) => word);
+
   return words.length ? words.join("、") : "还没有明显重复的小词。";
 }
+
+const keywordStopWords = new Set([
+  "我们",
+  "你们",
+  "他们",
+  "自己",
+  "一个",
+  "一些",
+  "一点",
+  "这个",
+  "那个",
+  "这里",
+  "那里",
+  "什么",
+  "怎么",
+  "还是",
+  "就是",
+  "只是",
+  "但是",
+  "然后",
+  "因为",
+  "所以",
+  "如果",
+  "没有",
+  "不是",
+  "可以",
+  "觉得",
+  "感觉",
+  "好像",
+  "有点",
+  "真的",
+  "一下",
+  "the",
+  "and",
+  "for",
+  "you",
+  "are",
+  "was",
+  "with",
+  "this",
+  "that",
+]);
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
