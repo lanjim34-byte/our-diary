@@ -56,9 +56,9 @@ type Diary = {
   diaryDate: string;
   weather?: string | null;
   doodleUrl?: string | null;
-  responses: { by: string; text: string; colorKey?: string | null }[];
-  comments: { by: string; text: string; time: string; colorKey?: string | null }[];
-  followUps: { by: string; text: string; time: string }[];
+  responses: { by: string; text: string; colorKey?: string | null; authorId?: string; createdAt?: string }[];
+  comments: { by: string; text: string; time: string; colorKey?: string | null; authorId?: string; createdAt?: string }[];
+  followUps: { by: string; text: string; time: string; authorId?: string; createdAt?: string }[];
   highlights: HighlightRange[];
   createdAt: string;
 };
@@ -110,10 +110,16 @@ function App() {
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [openDiaryId, setOpenDiaryId] = useState<string | null>(null);
   const [doodlePreview, setDoodlePreview] = useState<string | null>(null);
+  const [avatarDoodles, setAvatarDoodles] = useState<Record<string, string>>({});
+  const [avatarEditor, setAvatarEditor] = useState<Member | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAvatarDoodles(loadLocalAvatarDoodles());
+  }, []);
 
   useEffect(() => {
     if (!supabase) {
@@ -219,13 +225,32 @@ function App() {
         createdAt: entry.created_at,
         responses: stamps
           .filter((stamp: any) => stamp.diary_id === entry.id)
-          .map((stamp: any) => ({ by: profilesById.get(stamp.author_id)?.display_name ?? "朋友", text: stamp.stamp_type, colorKey: profilesById.get(stamp.author_id)?.color_key })),
+          .map((stamp: any) => ({
+            by: profilesById.get(stamp.author_id)?.display_name ?? "朋友",
+            text: stamp.stamp_type,
+            colorKey: profilesById.get(stamp.author_id)?.color_key,
+            authorId: stamp.author_id,
+            createdAt: stamp.created_at,
+          })),
         comments: paperNotes
           .filter((note: any) => note.diary_id === entry.id)
-          .map((note: any) => ({ by: profilesById.get(note.author_id)?.display_name ?? "朋友", text: note.content, time: formatNoteTime(note.created_at), colorKey: profilesById.get(note.author_id)?.color_key })),
+          .map((note: any) => ({
+            by: profilesById.get(note.author_id)?.display_name ?? "朋友",
+            text: note.content,
+            time: formatNoteTime(note.created_at),
+            colorKey: profilesById.get(note.author_id)?.color_key,
+            authorId: note.author_id,
+            createdAt: note.created_at,
+          })),
         followUps: followups
           .filter((followup: any) => followup.diary_id === entry.id)
-          .map((followup: any) => ({ by: profilesById.get(followup.author_id)?.display_name ?? "朋友", text: followup.content, time: formatNoteTime(followup.created_at) })),
+          .map((followup: any) => ({
+            by: profilesById.get(followup.author_id)?.display_name ?? "朋友",
+            text: followup.content,
+            time: formatNoteTime(followup.created_at),
+            authorId: followup.author_id,
+            createdAt: followup.created_at,
+          })),
         highlights: highlights
           .filter((highlight: any) => highlight.diary_id === entry.id)
           .map((highlight: any) => ({ id: highlight.id, start: highlight.start_index, end: highlight.end_index, colorKey: profilesById.get(highlight.author_id)?.color_key })),
@@ -445,7 +470,8 @@ function App() {
     );
   }
 
-  const selectedMember = members.find((member) => member.user_id === selectedPersonId) ?? members[0] ?? null;
+  const sortedMembers = sortMembersByActivity(members, diaries);
+  const selectedMember = sortedMembers.find((member) => member.user_id === selectedPersonId) ?? sortedMembers[0] ?? null;
   const selectedMemberDiaries = selectedMember ? diaries.filter((diary) => diary.authorId === selectedMember.user_id) : [];
   const groupedDiaries = groupDiaries(diaries);
 
@@ -454,6 +480,19 @@ function App() {
     navigator.clipboard?.writeText(activeNotebook.invite_code);
     setInviteCopied(true);
     window.setTimeout(() => setInviteCopied(false), 1600);
+  }
+
+  function saveAvatarDoodle(userId: string, imageUrl: string | null) {
+    setAvatarDoodles((current) => {
+      const next = { ...current };
+      if (imageUrl) {
+        next[userId] = imageUrl;
+      } else {
+        delete next[userId];
+      }
+      saveLocalAvatarDoodles(next);
+      return next;
+    });
   }
 
   return (
@@ -473,20 +512,33 @@ function App() {
         {tab === "feed" && (
           <section className="notebook-home">
             <div className="member-strip">
-              {members.map((member) => (
+              {sortedMembers.map((member, index) => (
                 <button
                   key={member.user_id}
                   className="member-pill"
-                  style={personStyle(member.profile)}
+                  style={{ ...personStyle(member.profile), "--member-tilt": `${index % 2 === 0 ? -0.5 : 0.7}deg` } as React.CSSProperties}
                   onClick={() => {
                     setSelectedPersonId(member.user_id);
                     setTab("friends");
                   }}
                 >
-                  <span className="avatar" style={personStyle(member.profile)}>{member.profile.avatar_initial}</span>
+                  <span
+                    className="avatar-edit-hit"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (member.user_id === session.user.id) {
+                        setAvatarEditor(member);
+                      } else {
+                        setSelectedPersonId(member.user_id);
+                        setTab("friends");
+                      }
+                    }}
+                  >
+                    <AvatarSticker profile={member.profile} imageUrl={avatarDoodles[member.user_id]} />
+                  </span>
                   <span>
                     <strong>{member.profile.display_name}</strong>
-                    <small>{memberMoodSummary(member, diaries)}</small>
+                    <small>{memberTraceSummary(member, diaries)}</small>
                   </span>
                 </button>
               ))}
@@ -552,7 +604,7 @@ function App() {
         {tab === "friends" && (
           <section className="stack">
             <div className="friend-switch">
-              {members.map((member) => (
+              {sortedMembers.map((member) => (
                 <button key={member.user_id} className={member.user_id === selectedPersonId ? "active" : ""} onClick={() => setSelectedPersonId(member.user_id)}>
                   {member.profile.display_name}
                 </button>
@@ -560,7 +612,7 @@ function App() {
             </div>
             {selectedMember && (
               <article className="profile-panel" style={personStyle(selectedMember.profile)}>
-                <span className="avatar large" style={personStyle(selectedMember.profile)}>{selectedMember.profile.avatar_initial}</span>
+                <AvatarSticker profile={selectedMember.profile} imageUrl={avatarDoodles[selectedMember.user_id]} large />
                 <div>
                   <p className="eyebrow">最近在本子里写过</p>
                   <h2>{selectedMember.profile.display_name}</h2>
@@ -599,6 +651,142 @@ function App() {
       </nav>
 
       {doodlePreview && <DoodlePreview imageUrl={doodlePreview} onClose={() => setDoodlePreview(null)} />}
+      {avatarEditor && (
+        <AvatarDoodleEditor
+          member={avatarEditor}
+          imageUrl={avatarDoodles[avatarEditor.user_id] ?? null}
+          onClose={() => setAvatarEditor(null)}
+          onSave={(imageUrl) => {
+            saveAvatarDoodle(avatarEditor.user_id, imageUrl);
+            setAvatarEditor(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function AvatarSticker({ profile, imageUrl, large = false }: { profile: Profile; imageUrl?: string | null; large?: boolean }) {
+  const initial = avatarInitialForName(profile.display_name || profile.avatar_initial || "友");
+  return (
+    <span className={`avatar avatar-sticker ${large ? "large" : ""} ${imageUrl ? "has-image" : ""}`} style={personStyle(profile)}>
+      {imageUrl ? <img src={imageUrl} alt={`${profile.display_name}留下的小头像`} /> : <span>{initial}</span>}
+    </span>
+  );
+}
+
+function AvatarDoodleEditor({
+  member,
+  imageUrl,
+  onClose,
+  onSave,
+}: {
+  member: Member;
+  imageUrl: string | null;
+  onClose: () => void;
+  onSave: (imageUrl: string | null) => void;
+}) {
+  const color = getUserColor(member.profile.color_key);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const lastPoint = useRef<{ x: number; y: number } | null>(null);
+  const size = 220;
+
+  useEffect(() => {
+    restore(imageUrl);
+  }, [imageUrl, color.paperSoft]);
+
+  function prepare() {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = size * ratio;
+    canvas.height = size * ratio;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.fillStyle = color.paperSoft || color.paper;
+    context.fillRect(0, 0, size, size);
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = "#332b25";
+    context.lineWidth = 3;
+    return context;
+  }
+
+  function restore(source: string | null) {
+    const context = prepare();
+    if (!context || !source) return;
+    const image = new window.Image();
+    image.onload = () => context.drawImage(image, 0, 0, size, size);
+    image.src = source;
+  }
+
+  function pointFor(event: React.PointerEvent<HTMLCanvasElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * size,
+      y: ((event.clientY - rect.top) / rect.height) * size,
+    };
+  }
+
+  function start(event: React.PointerEvent<HTMLCanvasElement>) {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drawing.current = true;
+    lastPoint.current = pointFor(event);
+  }
+
+  function draw(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawing.current || !lastPoint.current) return;
+    event.preventDefault();
+    const context = canvasRef.current?.getContext("2d");
+    if (!context) return;
+    const next = pointFor(event);
+    context.beginPath();
+    context.moveTo(lastPoint.current.x, lastPoint.current.y);
+    context.lineTo(next.x, next.y);
+    context.stroke();
+    lastPoint.current = next;
+  }
+
+  function stop(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawing.current) return;
+    event.preventDefault();
+    drawing.current = false;
+    lastPoint.current = null;
+  }
+
+  function clear() {
+    prepare();
+  }
+
+  function save() {
+    onSave(canvasRef.current?.toDataURL("image/png") ?? null);
+  }
+
+  return (
+    <div className="avatar-editor-overlay" onClick={onClose}>
+      <section className="avatar-editor-paper" style={colorVars(color, "avatar")} onClick={(event) => event.stopPropagation()}>
+        <div>
+          <p className="eyebrow">给自己画一枚小贴纸</p>
+          <h2>{member.profile.display_name}</h2>
+        </div>
+        <canvas
+          ref={canvasRef}
+          className="avatar-doodle-canvas"
+          aria-label="绘制头像贴纸"
+          onPointerDown={start}
+          onPointerMove={draw}
+          onPointerUp={stop}
+          onPointerCancel={stop}
+        />
+        <div className="avatar-editor-actions">
+          <button type="button" onClick={clear}>清空</button>
+          <button type="button" onClick={save}>保存</button>
+          <button type="button" onClick={onClose}>合上</button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -633,6 +821,7 @@ function DiaryEntry({
   const [noteText, setNoteText] = useState("");
   const [followText, setFollowText] = useState("");
   const [highlightBubble, setHighlightBubble] = useState<HighlightBubble>(null);
+  const [isTorn, setIsTorn] = useState(false);
   const textRef = useRef<HTMLParagraphElement>(null);
   const isAuthor = diary.authorId === currentUserId;
 
@@ -678,7 +867,7 @@ function DiaryEntry({
   }
 
   return (
-    <article className={`diary-entry ${expanded ? "is-expanded" : ""}`} style={personStyle(author.profile)}>
+    <article className={`diary-entry ${expanded ? "is-expanded" : ""} ${isTorn ? "is-torn" : ""}`} style={personStyle(author.profile)}>
       <div className="loose-leaf-holes" aria-hidden="true">
         <span />
         <span />
@@ -696,118 +885,125 @@ function DiaryEntry({
       <DiaryPageMeta diaryDate={diary.diaryDate} weather={diary.weather} />
       <MoodLine moodTone={diary.moodTone} moodWords={diary.moodWords} fallbackMood={diary.status} />
 
-      <div className="diary-body">
-        {diary.doodleUrl && (
-          <button className="diary-doodle-sticker" type="button" onClick={() => onDoodlePreview(diary.doodleUrl!)}>
-            <img src={diary.doodleUrl} alt="这页夹着一张涂鸦便利贴" />
-          </button>
-        )}
-        <p className="diary-text" ref={textRef} onMouseUp={handleTextSelection} onKeyUp={handleTextSelection}>
-          <HighlightedText text={diary.text} highlights={diary.highlights} />
-          {highlightBubble && (
-            <button
-              className="highlight-bubble"
-              style={{ left: `${highlightBubble.x}px`, top: `${highlightBubble.y}px` }}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={applyHighlight}
-            >
-              划一下
-            </button>
-          )}
-        </p>
-        {diary.followUps.map((item, index) => (
-          <p className="follow-line" key={`${item.time}-${index}`}>
-            <span>后来又写：</span>{item.text}
-          </p>
-        ))}
-        {diary.responses.length > 0 && <StampTrail stamps={diary.responses} />}
-      </div>
-
-      <button className="detail-button" onClick={onToggle}>
-        <MessageCircle size={16} />
-        {expanded ? "合上页角" : quietSummary(diary)}
-      </button>
-
-      {expanded && (
-        <div className="entry-expanded">
-          <div className="quiet-actions">
-            <button onClick={() => toggleComposer("stamp")}>盖个小印章</button>
-            <button onClick={() => toggleComposer("note")}>夹一张小纸条</button>
-            {isAuthor && <button onClick={() => toggleComposer("follow")}>再补一句</button>}
+      {isTorn ? (
+        <div className="torn-page-remnant" aria-hidden="true" />
+      ) : (
+        <>
+          <div className="diary-body">
+            {diary.doodleUrl && (
+              <button className="diary-doodle-sticker" type="button" onClick={() => onDoodlePreview(diary.doodleUrl!)}>
+                <img src={diary.doodleUrl} alt="这页夹着一张涂鸦便利贴" />
+              </button>
+            )}
+            <p className="diary-text" ref={textRef} onMouseUp={handleTextSelection} onKeyUp={handleTextSelection}>
+              <HighlightedText text={diary.text} highlights={diary.highlights} />
+              {highlightBubble && (
+                <button
+                  className="highlight-bubble"
+                  style={{ left: `${highlightBubble.x}px`, top: `${highlightBubble.y}px` }}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={applyHighlight}
+                >
+                  划一下
+                </button>
+              )}
+            </p>
+            {diary.followUps.map((item, index) => (
+              <p className="follow-line" key={`${item.time}-${index}`}>
+                <span>ps：</span>{item.text}
+              </p>
+            ))}
+            {diary.responses.length > 0 && <StampTrail stamps={diary.responses} />}
           </div>
 
-          {composer === "stamp" && (
-            <div className="stamp-picker" aria-label="选择小印章">
-              {stampOptions.map((stamp) => {
-                const Icon = stamp.icon;
-                return (
-                  <button
-                    className={`stamp-option stamp-${stamp.name}`}
-                    key={stamp.name}
-                    onClick={() => {
-                      onStamp(stamp.name);
-                      setComposer(null);
-                    }}
-                  >
-                    <Icon size={17} />
-                    <span>{stamp.name}</span>
-                    <small>{stamp.hint}</small>
-                  </button>
-                );
-              })}
+          <button className="detail-button" onClick={onToggle}>
+            <MessageCircle size={16} />
+            {expanded ? "合上页角" : quietSummary(diary)}
+          </button>
+
+          {expanded && (
+            <div className="entry-expanded">
+              <div className="quiet-actions">
+                <button onClick={() => toggleComposer("stamp")}>盖个小印章</button>
+                <button onClick={() => toggleComposer("note")}>夹一张小纸条</button>
+                {isAuthor && <button onClick={() => toggleComposer("follow")}>再补一句</button>}
+                {isAuthor && <button onClick={() => { setIsTorn(true); setComposer(null); }}>撕掉这一页</button>}
+              </div>
+
+              {composer === "stamp" && (
+                <div className="stamp-picker" aria-label="选择小印章">
+                  {stampOptions.map((stamp) => {
+                    const Icon = stamp.icon;
+                    return (
+                      <button
+                        className={`stamp-option stamp-${stamp.name}`}
+                        key={stamp.name}
+                        onClick={() => {
+                          onStamp(stamp.name);
+                          setComposer(null);
+                        }}
+                      >
+                        <Icon size={17} />
+                        <span>{stamp.name}</span>
+                        <small>{stamp.hint}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {diary.comments.length > 0 && (
+                <section className="paper-notes-area">
+                  <h3>朋友们夹了几张小纸条</h3>
+                  <div className="paper-notes">
+                    {diary.comments.map((item, index) => (
+                      <button
+                        key={`${item.by}-${index}`}
+                        className={`paper-note ${openNote === index ? "open" : ""}`}
+                        style={{
+                          "--tilt": `${index % 2 === 0 ? -2 : 2}deg`,
+                          "--lift": `${index * -7}px`,
+                          ...colorVars(getUserColor(item.colorKey), "note"),
+                        } as React.CSSProperties}
+                        onClick={() => setOpenNote(openNote === index ? null : index)}
+                      >
+                        <strong>{item.by}</strong>
+                        <span>{openNote === index ? item.text : shortText(item.text)}</span>
+                        <small>{item.time}</small>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {composer === "note" && (
+                <InlineForm
+                  value={noteText}
+                  setValue={setNoteText}
+                  placeholder="写在一张小纸条上"
+                  button="夹上"
+                  onSubmit={(text) => {
+                    onNote(text);
+                    setComposer(null);
+                  }}
+                />
+              )}
+
+              {composer === "follow" && isAuthor && (
+                <InlineForm
+                  value={followText}
+                  setValue={setFollowText}
+                  placeholder="后来又想补一句"
+                  button="补上"
+                  onSubmit={(text) => {
+                    onFollowUp(text);
+                    setComposer(null);
+                  }}
+                />
+              )}
             </div>
           )}
-
-          {diary.comments.length > 0 && (
-            <section className="paper-notes-area">
-              <h3>朋友们夹了几张小纸条</h3>
-              <div className="paper-notes">
-                {diary.comments.map((item, index) => (
-                  <button
-                    key={`${item.by}-${index}`}
-                    className={`paper-note ${openNote === index ? "open" : ""}`}
-                    style={{
-                      "--tilt": `${index % 2 === 0 ? -2 : 2}deg`,
-                      "--lift": `${index * -7}px`,
-                      ...colorVars(getUserColor(item.colorKey), "note"),
-                    } as React.CSSProperties}
-                    onClick={() => setOpenNote(openNote === index ? null : index)}
-                  >
-                    <strong>{item.by}</strong>
-                    <span>{openNote === index ? item.text : shortText(item.text)}</span>
-                    <small>{item.time}</small>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {composer === "note" && (
-            <InlineForm
-              value={noteText}
-              setValue={setNoteText}
-              placeholder="写在一张小纸条上"
-              button="夹上"
-              onSubmit={(text) => {
-                onNote(text);
-                setComposer(null);
-              }}
-            />
-          )}
-
-          {composer === "follow" && isAuthor && (
-            <InlineForm
-              value={followText}
-              setValue={setFollowText}
-              placeholder="后来又想补一句"
-              button="补上"
-              onSubmit={(text) => {
-                onFollowUp(text);
-                setComposer(null);
-              }}
-            />
-          )}
-        </div>
+        </>
       )}
     </article>
   );
@@ -1538,7 +1734,6 @@ function DoodlePreview({ imageUrl, onClose }: { imageUrl: string; onClose: () =>
   return (
     <div className="doodle-preview-overlay" onClick={onClose}>
       <div className="doodle-preview-note" onClick={(event) => event.stopPropagation()}>
-        <button type="button" onClick={onClose}>合上</button>
         <img src={imageUrl} alt="放大的涂鸦便利贴" />
       </div>
     </div>
@@ -1724,7 +1919,7 @@ async function ensureProfile(user: User) {
   const profile = {
     id: user.id,
     display_name: displayName,
-    avatar_initial: displayName.slice(0, 1) || "友",
+    avatar_initial: avatarInitialForName(displayName),
     color_key: colorKey,
   };
   const { data, error } = await supabase.from("profiles").insert(profile).select("id,display_name,avatar_initial,color_key").single();
@@ -1747,9 +1942,30 @@ function memberFor(members: Member[], id: string): Member {
   };
 }
 
-function memberMoodSummary(member: Member, diaries: Diary[]) {
+function sortMembersByActivity(members: Member[], diaries: Diary[]) {
+  return [...members].sort((left, right) => memberLastActivityAt(right, diaries) - memberLastActivityAt(left, diaries));
+}
+
+function memberLastActivityAt(member: Member, diaries: Diary[]) {
+  let latest = 0;
+  diaries.forEach((diary) => {
+    if (diary.authorId === member.user_id) latest = Math.max(latest, timeValue(diary.createdAt));
+    diary.comments.forEach((note) => {
+      if (note.authorId === member.user_id) latest = Math.max(latest, timeValue(note.createdAt));
+    });
+    diary.responses.forEach((stamp) => {
+      if (stamp.authorId === member.user_id) latest = Math.max(latest, timeValue(stamp.createdAt));
+    });
+    diary.followUps.forEach((followup) => {
+      if (followup.authorId === member.user_id) latest = Math.max(latest, timeValue(followup.createdAt));
+    });
+  });
+  return latest;
+}
+
+function memberTraceSummary(member: Member, diaries: Diary[]) {
   const latest = diaries.find((diary) => diary.authorId === member.user_id);
-  if (!latest) return "这一页还空着";
+  if (!latest) return memberLastActivityAt(member, diaries) ? "最近来过" : "还没写过";
 
   const toneLabel = getMoodToneOption(latest.moodTone)?.label;
   const firstWord = latest.moodWords[0];
@@ -1759,12 +1975,94 @@ function memberMoodSummary(member: Member, diaries: Diary[]) {
   return "最近写过";
 }
 
+function timeValue(value?: string) {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
 function personStyle(profile: Profile) {
   return colorVars(getUserColor(profile.color_key));
 }
 
 function fallbackProfile(id: string): Profile {
   return { id, display_name: "朋友", avatar_initial: "友", color_key: null };
+}
+
+const weakAvatarChars = new Set([
+  "小",
+  "大",
+  "老",
+  "阿",
+  "叔",
+  "姐",
+  "哥",
+  "兄",
+  "妹",
+  "弟",
+  "师",
+  "傅",
+  "宝",
+  "贝",
+  "亲",
+  "甜",
+  "萌",
+  "乖",
+]);
+
+const weakAvatarWords = ["阿姨", "师傅", "宝贝", "亲亲", "宝宝", "小可爱"];
+const weakSingleLatin = new Set(["a", "b", "c", "x", "y", "z"]);
+
+function avatarInitialForName(name: string) {
+  const normalized = name.trim();
+  if (!normalized) return "友";
+  const compact = normalized.replace(/\s+/g, "");
+  const withoutWeakWords = weakAvatarWords.reduce((value, word) => value.replaceAll(word, ""), compact);
+  const chars = Array.from(withoutWeakWords || compact).filter((char) => !/[\s~～_\-.·,，。!！?？/\\|()[\]{}<>《》:;"'`]/.test(char));
+  if (!chars.length) return "友";
+
+  const meaningfulChinese = chars.filter((char) => isChineseChar(char) && !weakAvatarChars.has(char));
+  if (meaningfulChinese.length) return meaningfulChinese[meaningfulChinese.length - 1];
+
+  const chinese = chars.filter(isChineseChar);
+  if (chinese.length >= 2) return chinese[chinese.length - 1];
+
+  const letters = chars.filter((char) => /[A-Za-z]/.test(char));
+  if (letters.length) {
+    const upperLetters = letters.map((char) => char.toUpperCase());
+    const useful = upperLetters.find((char) => !weakSingleLatin.has(char.toLowerCase()));
+    if (useful) return useful;
+    return upperLetters.slice(0, Math.min(2, upperLetters.length)).join("");
+  }
+
+  const digits = chars.filter((char) => /\d/.test(char));
+  if (digits.length) return digits.join("").slice(0, 3);
+
+  return chars[chars.length - 1] || "友";
+}
+
+function isChineseChar(char: string) {
+  return /\p{Script=Han}/u.test(char);
+}
+
+const AVATAR_DOODLES_KEY = "our-diary-avatar-doodles";
+
+function loadLocalAvatarDoodles() {
+  try {
+    const value = window.localStorage.getItem(AVATAR_DOODLES_KEY);
+    if (!value) return {};
+    return JSON.parse(value) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function saveLocalAvatarDoodles(value: Record<string, string>) {
+  try {
+    window.localStorage.setItem(AVATAR_DOODLES_KEY, JSON.stringify(value));
+  } catch {
+    // 本地存储不可用时，只保留当前页面内的头像状态。
+  }
 }
 
 function colorVars(color = defaultUserColor, prefix = "person") {
