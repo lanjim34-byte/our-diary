@@ -30,6 +30,7 @@ type Profile = {
   display_name: string;
   avatar_initial: string;
   color_key: string | null;
+  avatar_doodle_url?: string | null;
 };
 
 type Notebook = {
@@ -182,7 +183,7 @@ function App() {
     try {
       const { data: memberRows, error: membersError } = await supabase
         .from("notebook_members")
-        .select("user_id, role, profiles(id,display_name,avatar_initial,color_key)")
+        .select("user_id, role, profiles(id,display_name,avatar_initial,color_key,avatar_doodle_url)")
         .eq("notebook_id", notebook.id)
         .order("joined_at", { ascending: true });
       if (membersError) throw membersError;
@@ -499,11 +500,40 @@ function App() {
     window.setTimeout(() => setInviteCopied(false), 1600);
   }
 
-  function saveAvatarDoodle(userId: string, imageUrl: string | null) {
+  async function uploadAvatarDoodleImage(dataUrl: string) {
+    if (!supabase || !session?.user) throw new Error("还没登录，不能保存头像");
+    const blob = dataUrlToBlob(dataUrl);
+    const path = `${session.user.id}/avatars/${Date.now()}.png`;
+    const { error: uploadError } = await supabase.storage.from("doodles").upload(path, blob, {
+      contentType: "image/png",
+      upsert: false,
+    });
+    if (uploadError) throw uploadError;
+    const { data } = supabase.storage.from("doodles").getPublicUrl(path);
+    return data.publicUrl;
+  }
+
+  async function saveAvatarDoodle(userId: string, imageUrl: string | null) {
+    if (!supabase || !session?.user || userId !== session.user.id) return;
+    const nextImageUrl = imageUrl?.startsWith("data:") ? await uploadAvatarDoodleImage(imageUrl) : imageUrl;
+    const { data, error: updateError } = await supabase
+      .from("profiles")
+      .update({ avatar_doodle_url: nextImageUrl })
+      .eq("id", userId)
+      .select("id,display_name,avatar_initial,color_key,avatar_doodle_url")
+      .single();
+    if (updateError) {
+      setError(errorMessage(updateError));
+      throw updateError;
+    }
+    setProfile(data as Profile);
+    setMembers((current) =>
+      current.map((member) => (member.user_id === userId ? { ...member, profile: data as Profile } : member))
+    );
     setAvatarDoodles((current) => {
       const next = { ...current };
-      if (imageUrl) {
-        next[userId] = imageUrl;
+      if (nextImageUrl) {
+        next[userId] = nextImageUrl;
       } else {
         delete next[userId];
       }
@@ -551,7 +581,7 @@ function App() {
                       }
                     }}
                   >
-                    <AvatarSticker profile={member.profile} imageUrl={avatarDoodles[member.user_id]} />
+                    <AvatarSticker profile={member.profile} imageUrl={member.profile.avatar_doodle_url ?? avatarDoodles[member.user_id]} />
                   </span>
                   <span>
                     <strong>{member.profile.display_name}</strong>
@@ -630,7 +660,7 @@ function App() {
             </div>
             {selectedMember && (
               <article className="profile-panel" style={personStyle(selectedMember.profile)}>
-                <AvatarSticker profile={selectedMember.profile} imageUrl={avatarDoodles[selectedMember.user_id]} large />
+                <AvatarSticker profile={selectedMember.profile} imageUrl={selectedMember.profile.avatar_doodle_url ?? avatarDoodles[selectedMember.user_id]} large />
                 <div>
                   <p className="eyebrow">最近在本子里写过</p>
                   <h2>{selectedMember.profile.display_name}</h2>
@@ -673,10 +703,10 @@ function App() {
       {avatarEditor && (
         <AvatarDoodleEditor
           member={avatarEditor}
-          imageUrl={avatarDoodles[avatarEditor.user_id] ?? null}
+          imageUrl={avatarEditor.profile.avatar_doodle_url ?? avatarDoodles[avatarEditor.user_id] ?? null}
           onClose={() => setAvatarEditor(null)}
-          onSave={(imageUrl) => {
-            saveAvatarDoodle(avatarEditor.user_id, imageUrl);
+          onSave={async (imageUrl) => {
+            await saveAvatarDoodle(avatarEditor.user_id, imageUrl);
             setAvatarEditor(null);
           }}
         />
@@ -703,12 +733,14 @@ function AvatarDoodleEditor({
   member: Member;
   imageUrl: string | null;
   onClose: () => void;
-  onSave: (imageUrl: string | null) => void;
+  onSave: (imageUrl: string | null) => Promise<void>;
 }) {
   const color = getUserColor(member.profile.color_key);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const lastPoint = useRef<{ x: number; y: number } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const size = 220;
 
   useEffect(() => {
@@ -737,6 +769,7 @@ function AvatarDoodleEditor({
     const context = prepare();
     if (!context || !source) return;
     const image = new window.Image();
+    image.crossOrigin = "anonymous";
     image.onload = () => context.drawImage(image, 0, 0, size, size);
     image.src = source;
   }
@@ -780,8 +813,17 @@ function AvatarDoodleEditor({
     prepare();
   }
 
-  function save() {
-    onSave(canvasRef.current?.toDataURL("image/png") ?? null);
+  async function save() {
+    if (saving) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      await onSave(canvasRef.current?.toDataURL("image/png") ?? null);
+    } catch (saveError) {
+      setMessage(errorMessage(saveError));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -801,10 +843,11 @@ function AvatarDoodleEditor({
           onPointerCancel={stop}
         />
         <div className="avatar-editor-actions">
-          <button type="button" onClick={clear}>清空</button>
-          <button type="button" onClick={save}>保存</button>
+          <button type="button" onClick={clear} disabled={saving}>清空</button>
+          <button type="button" onClick={save} disabled={saving}>{saving ? "保存中" : "保存"}</button>
           <button type="button" onClick={onClose}>合上</button>
         </div>
+        {message && <p className="error-note">{message}</p>}
       </section>
     </div>
   );
@@ -1197,7 +1240,7 @@ function ColorSetupPage({ profile, onSaved }: { profile: Profile; onSaved: (prof
       .from("profiles")
       .update({ color_key: colorKey })
       .eq("id", profile.id)
-      .select("id,display_name,avatar_initial,color_key")
+      .select("id,display_name,avatar_initial,color_key,avatar_doodle_url")
       .single();
     setSaving(false);
     if (error) {
@@ -2106,7 +2149,7 @@ async function ensureProfile(user: User) {
   const displayName = String(user.user_metadata?.display_name || user.email?.split("@")[0] || "新朋友");
   const { data: existing, error: selectError } = await supabase
     .from("profiles")
-    .select("id,display_name,avatar_initial,color_key")
+    .select("id,display_name,avatar_initial,color_key,avatar_doodle_url")
     .eq("id", user.id)
     .maybeSingle();
   if (selectError) throw selectError;
@@ -2119,7 +2162,7 @@ async function ensureProfile(user: User) {
     avatar_initial: avatarInitialForName(displayName),
     color_key: colorKey,
   };
-  const { data, error } = await supabase.from("profiles").insert(profile).select("id,display_name,avatar_initial,color_key").single();
+  const { data, error } = await supabase.from("profiles").insert(profile).select("id,display_name,avatar_initial,color_key,avatar_doodle_url").single();
   if (error) throw error;
   return data as Profile;
 }
