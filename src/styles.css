@@ -61,7 +61,7 @@ body {
     radial-gradient(circle at 20% 10%, rgba(255, 230, 192, 0.38), transparent 34%),
     radial-gradient(circle at 80% 0%, rgba(214, 235, 199, 0.34), transparent 32%),
     linear-gradient(135deg, var(--paper-bg) 0%, var(--paper-bg-cool) 100%);
-  background-attachment: fixed;
+  background-attachment: scroll;
 }
 
 button,
@@ -81,16 +81,37 @@ button {
 }
 
 .app {
+  position: relative;
+  overflow-x: hidden;
   min-height: 100vh;
   padding: 0 0 112px;
   background:
     radial-gradient(circle at 18% 12%, rgba(245, 205, 166, 0.25), transparent 38%),
     radial-gradient(circle at 88% 18%, rgba(205, 230, 190, 0.24), transparent 36%),
     linear-gradient(135deg, rgba(249, 239, 224, 0.74) 0%, rgba(238, 245, 229, 0.74) 100%);
-  background-attachment: fixed;
+  background-attachment: scroll;
+}
+
+.app::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  min-height: 100%;
+  background-image:
+    linear-gradient(rgba(255, 247, 232, 0.08), rgba(255, 247, 232, 0.08)),
+    var(--wood-pattern-images, url("/patterns/wood/wood-01-edge.png"));
+  background-repeat: repeat, repeat;
+  background-position: var(--wood-pattern-positions, left top);
+  background-size: var(--wood-pattern-sizes, 560px 560px);
+  opacity: 0.32;
+  mix-blend-mode: multiply;
 }
 
 .phone-shell {
+  position: relative;
+  z-index: 1;
   width: min(100%, 760px);
   margin: 0 auto;
   padding: 18px 16px 28px;
@@ -598,13 +619,15 @@ small {
   border: 0;
   border-radius: 5px;
   background:
-    radial-gradient(circle at 72% 12%, rgba(255, 255, 255, 0.5), transparent 38%),
+    radial-gradient(ellipse at 16% 76%, color-mix(in srgb, var(--person-paper) 34%, transparent), transparent 42%),
+    radial-gradient(ellipse at 86% 84%, color-mix(in srgb, var(--person-light) 22%, transparent), transparent 46%),
+    radial-gradient(ellipse at 54% 64%, rgba(255, 250, 241, 0.34), transparent 52%),
     linear-gradient(
       180deg,
       var(--paper-surface) 0%,
-      color-mix(in srgb, var(--person-paper-soft) 22%, var(--paper-surface)) 36%,
-      color-mix(in srgb, var(--person-paper-soft) 58%, var(--paper-surface-warm)) 72%,
-      color-mix(in srgb, var(--person-paper) 72%, var(--paper-surface-deep)) 100%
+      color-mix(in srgb, var(--person-paper-soft) 15%, var(--paper-surface)) 34%,
+      color-mix(in srgb, var(--person-paper-soft) 34%, var(--paper-surface-warm)) 70%,
+      color-mix(in srgb, var(--person-paper) 48%, var(--paper-surface-deep)) 100%
     );
   box-shadow: var(--shadow-paper);
   transition: background 180ms ease, box-shadow 180ms ease, transform 180ms ease;
@@ -612,25 +635,29 @@ small {
 
 .diary-entry:nth-child(2n) {
   background:
-    radial-gradient(circle at 68% 13%, rgba(255, 255, 255, 0.48), transparent 38%),
+    radial-gradient(ellipse at 22% 82%, color-mix(in srgb, var(--person-paper) 32%, transparent), transparent 43%),
+    radial-gradient(ellipse at 78% 72%, color-mix(in srgb, var(--person-light) 20%, transparent), transparent 45%),
+    radial-gradient(ellipse at 48% 56%, rgba(255, 250, 241, 0.3), transparent 54%),
     linear-gradient(
       180deg,
       var(--paper-surface) 0%,
-      color-mix(in srgb, var(--person-paper-soft) 20%, var(--paper-surface)) 36%,
-      color-mix(in srgb, var(--person-paper-soft) 56%, var(--paper-surface-warm)) 72%,
-      color-mix(in srgb, var(--person-paper) 70%, var(--paper-surface-deep)) 100%
+      color-mix(in srgb, var(--person-paper-soft) 14%, var(--paper-surface)) 34%,
+      color-mix(in srgb, var(--person-paper-soft) 32%, var(--paper-surface-warm)) 70%,
+      color-mix(in srgb, var(--person-paper) 46%, var(--paper-surface-deep)) 100%
     );
 }
 
 .diary-entry:nth-child(3n) {
   background:
-    radial-gradient(circle at 76% 14%, rgba(255, 255, 255, 0.46), transparent 40%),
+    radial-gradient(ellipse at 18% 68%, color-mix(in srgb, var(--person-light) 19%, transparent), transparent 46%),
+    radial-gradient(ellipse at 84% 88%, color-mix(in srgb, var(--person-paper) 35%, transparent), transparent 42%),
+    radial-gradient(ellipse at 52% 58%, rgba(255, 250, 241, 0.32), transparent 54%),
     linear-gradient(
       180deg,
       var(--paper-surface) 0%,
-      color-mix(in srgb, var(--person-paper-soft) 21%, var(--paper-surface)) 36%,
-      color-mix(in srgb, var(--person-paper-soft) 55%, var(--paper-surface-warm)) 72%,
-      color-mix(in srgb, var(--person-paper) 68%, var(--paper-surface-deep)) 100%
+      color-mix(in srgb, var(--person-paper-soft) 15%, var(--paper-surface)) 34%,
+      color-mix(in srgb, var(--person-paper-soft) 31%, var(--paper-surface-warm)) 70%,
+      color-mix(in srgb, var(--person-paper) 45%, var(--paper-surface-deep)) 100%
     );
 }
 
@@ -647,13 +674,17 @@ small {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background:
-    radial-gradient(circle at 18% 22%, rgba(97, 75, 48, 0.05) 0 0.45px, transparent 0.8px),
-    radial-gradient(circle at 72% 64%, rgba(255, 255, 255, 0.36) 0 0.55px, transparent 0.95px),
+  background-image:
+    var(--diary-pattern-images),
+    radial-gradient(circle at 18% 22%, rgba(97, 75, 48, 0.035) 0 0.45px, transparent 0.8px),
+    radial-gradient(circle at 72% 64%, rgba(255, 255, 255, 0.26) 0 0.55px, transparent 0.95px),
     repeating-linear-gradient(101deg, var(--paper-fiber) 0 1px, transparent 1px 9px),
-    linear-gradient(90deg, color-mix(in srgb, var(--person-base) 8%, rgba(120, 92, 62, 0.035)), transparent 11%, transparent 90%, color-mix(in srgb, var(--person-base) 7%, rgba(120, 92, 62, 0.03)));
-  background-size: 21px 28px, 29px 37px, 100% 100%, 100% 100%;
-  opacity: 0.66;
+    linear-gradient(90deg, color-mix(in srgb, var(--person-base) 5%, rgba(120, 92, 62, 0.02)), transparent 13%, transparent 88%, color-mix(in srgb, var(--person-base) 5%, rgba(120, 92, 62, 0.02)));
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat, repeat, repeat, no-repeat;
+  background-position: var(--diary-pattern-positions), 0 0, 0 0, 0 0, 0 0;
+  background-size: var(--diary-pattern-sizes), 21px 28px, 29px 37px, 100% 100%, 100% 100%;
+  opacity: 0.26;
+  mix-blend-mode: multiply;
   pointer-events: none;
 }
 
@@ -1107,8 +1138,8 @@ small {
   position: absolute;
   top: 18px;
   right: 4px;
-  width: 92px;
-  min-height: 96px;
+  width: 118px;
+  min-height: 122px;
   pointer-events: none;
 }
 
@@ -1128,31 +1159,12 @@ small {
   background: transparent;
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--stamp-light) 16%, transparent);
   mix-blend-mode: multiply;
-  transform: rotate(-3deg);
+  top: var(--stamp-top, 0);
+  right: var(--stamp-right, 0);
+  z-index: var(--stamp-layer, 1);
+  transform: rotate(var(--stamp-rotate, -3deg)) scale(var(--stamp-scale, 0.9));
   opacity: 0;
   animation: stampLand 180ms ease-out forwards;
-}
-
-.stamp-mark:nth-child(1) {
-  top: 0;
-  right: 0;
-  transform: rotate(-7deg) scale(0.92);
-}
-
-.stamp-mark:nth-child(2) {
-  top: 42px;
-  right: 18px;
-  transform: rotate(5deg) scale(0.9);
-}
-
-.stamp-mark:nth-child(3) {
-  top: 78px;
-  right: -2px;
-  transform: rotate(-2deg) scale(0.86);
-}
-
-.stamp-mark:nth-child(n + 4) {
-  display: none;
 }
 
 .stamp-mark small {
@@ -1967,13 +1979,50 @@ small {
   gap: 8px;
 }
 
-.doodle-library-grid button {
+.doodle-library-item {
+  position: relative;
+  aspect-ratio: 1;
+}
+
+.doodle-library-thumb {
+  width: 100%;
+  height: 100%;
   aspect-ratio: 1;
   padding: 5px;
   border: 1px solid color-mix(in srgb, var(--doodle-light) 56%, rgba(144, 111, 82, 0.18));
   border-radius: 7px;
   background: var(--doodle-paper-soft);
   box-shadow: 0 3px 8px rgba(83, 58, 34, 0.08);
+}
+
+.doodle-library-delete {
+  position: absolute;
+  top: -6px;
+  right: -7px;
+  z-index: 1;
+  min-width: 42px;
+  padding: 3px 6px;
+  border: 1px solid color-mix(in srgb, var(--doodle-light) 60%, rgba(137, 103, 72, 0.22));
+  border-radius: 2px;
+  color: #735745;
+  background:
+    radial-gradient(circle at 82% 16%, rgba(255, 255, 255, 0.36), transparent 42%),
+    color-mix(in srgb, var(--doodle-paper-soft) 86%, #fff7ea);
+  box-shadow: 0 3px 8px rgba(83, 58, 34, 0.1);
+  font-family: var(--font-hand);
+  font-size: 13px;
+  line-height: 1.15;
+  transform: rotate(3deg);
+}
+
+.doodle-library-delete:hover {
+  transform: translateY(1px) rotate(0deg);
+  background: color-mix(in srgb, var(--doodle-light) 24%, var(--doodle-paper-soft));
+}
+
+.doodle-library-delete:disabled {
+  cursor: default;
+  opacity: 0.62;
 }
 
 .doodle-library-grid img {
@@ -2617,27 +2666,16 @@ small {
     top: auto;
     right: 4px;
     bottom: 2px;
-    width: 150px;
-    min-height: 48px;
+    width: 156px;
+    min-height: 78px;
   }
 
   .stamp-mark {
-    width: 68px;
+    width: 66px;
     min-height: 36px;
-  }
-
-  .stamp-mark:nth-child(1) {
-    top: 4px;
-    right: 0;
-  }
-
-  .stamp-mark:nth-child(2) {
-    top: 4px;
-    right: 62px;
-  }
-
-  .stamp-mark:nth-child(3) {
-    display: none;
+    top: var(--stamp-top, 0);
+    right: var(--stamp-right, 0);
+    transform: rotate(var(--stamp-rotate, -3deg)) scale(var(--stamp-scale, 0.9));
   }
 
   .stamp-picker {

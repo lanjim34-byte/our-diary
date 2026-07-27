@@ -14,7 +14,7 @@ import {
   Star,
   UserRound,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { hasSupabaseEnv, supabase } from "./supabaseClient";
 import { defaultUserColor, getUserColor, stableColorKey, userColors, type UserColorKey } from "./constants/userColors";
@@ -100,6 +100,38 @@ const stampOptions = [
   { name: "读到了", hint: "我读到了", icon: Check },
 ];
 
+const patternSources = [
+  "floral-04-unit-01",
+  "floral-05-unit-01",
+  "floral-05-unit-02",
+  "floral-05-unit-03",
+  "floral-06-unit-01",
+  "floral-06-unit-02",
+  "floral-06-unit-03",
+  "floral-06-unit-04",
+  "floral-06-unit-05",
+  "floral-14-unit-01",
+  "floral-14-unit-02",
+  "floral-14-unit-03",
+  "floral-14-unit-04",
+  "floral-14-unit-05",
+];
+const patternVariants = ["brown", "cream", "green", "yellow", "pink"];
+const diaryPatternPositions = [
+  ["right 7% top 78px", "left 8% bottom 56px", "right 24% bottom 138px"],
+  ["left 9% top 84px", "right 8% bottom 66px", "left 30% bottom 146px"],
+  ["right 12% top 118px", "left 7% bottom 94px", "right 31% bottom 46px"],
+  ["left 12% top 106px", "right 11% bottom 118px", "left 36% bottom 52px"],
+];
+const diaryPatternSizes = [
+  ["112px auto", "92px auto", "74px auto"],
+  ["104px auto", "88px auto", "70px auto"],
+  ["118px auto", "82px auto", "76px auto"],
+  ["98px auto", "96px auto", "68px auto"],
+];
+const woodPatternSources = ["wood-01-edge", "wood-02-edge", "wood-03-edge", "wood-04-edge"];
+const woodPatternSizes = ["460px 460px", "620px 620px", "780px 780px"];
+
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -118,7 +150,7 @@ function App() {
   const [inviteCopied, setInviteCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
+  const woodPatternStyle = useMemo(() => randomWoodPatternStyle(), []);
   useEffect(() => {
     setAvatarDoodles(loadLocalAvatarDoodles());
   }, []);
@@ -370,13 +402,21 @@ function App() {
   async function saveDoodleToApp(dataUrl: string) {
     if (!supabase || !activeNotebook || !session?.user) throw new Error("还没进入小本子，不能保存涂鸦");
     const imageUrl = await uploadDoodleImage(dataUrl);
-    const { error: insertError } = await supabase.from("doodles").insert({
-      user_id: session.user.id,
-      notebook_id: activeNotebook.id,
-      image_url: imageUrl,
-    });
+    const { data, error: insertError } = await supabase
+      .from("doodles")
+      .insert({
+        user_id: session.user.id,
+        notebook_id: activeNotebook.id,
+        image_url: imageUrl,
+      })
+      .select("id,image_url,created_at")
+      .single();
     if (insertError) throw insertError;
-    return imageUrl;
+    return {
+      id: data.id,
+      imageUrl: data.image_url,
+      createdAt: data.created_at,
+    } as SavedDoodle;
   }
 
   async function loadMyDoodles() {
@@ -393,6 +433,24 @@ function App() {
       imageUrl: item.image_url,
       createdAt: item.created_at,
     })) as SavedDoodle[];
+  }
+
+  async function deleteSavedDoodle(doodle: SavedDoodle) {
+    if (!supabase || !session?.user) throw new Error("还没连上小本子");
+    const { error: deleteError } = await supabase
+      .from("doodles")
+      .delete()
+      .eq("id", doodle.id)
+      .eq("user_id", session.user.id);
+    if (deleteError) throw deleteError;
+
+    const storagePath = doodleStoragePath(doodle.imageUrl);
+    if (storagePath) {
+      const { error: storageError } = await supabase.storage.from("doodles").remove([storagePath]);
+      if (storageError) {
+        console.warn("Doodle image cleanup failed", storageError);
+      }
+    }
   }
 
   async function addFollowUp(diaryId: string, text: string) {
@@ -543,7 +601,7 @@ function App() {
   }
 
   return (
-    <div className="app" style={notebookBackgroundStyle(members)}>
+    <div className="app" style={{ ...notebookBackgroundStyle(members), ...woodPatternStyle }}>
       <main className="phone-shell">
         <header className="topbar">
           <div>
@@ -646,6 +704,7 @@ function App() {
             onUploadDoodle={uploadDoodleImage}
             onSaveDoodle={saveDoodleToApp}
             onLoadDoodles={loadMyDoodles}
+            onDeleteDoodle={deleteSavedDoodle}
           />
         )}
 
@@ -941,7 +1000,10 @@ function DiaryEntry({
   }
 
   return (
-    <article className={`diary-entry ${expanded ? "is-expanded" : ""} ${isTorn ? "is-torn" : ""}`} style={personStyle(author.profile)}>
+    <article
+      className={`diary-entry ${expanded ? "is-expanded" : ""} ${isTorn ? "is-torn" : ""}`}
+      style={{ ...personStyle(author.profile), ...diaryPatternStyle(diary.id) }}
+    >
       <div className="loose-leaf-holes" aria-hidden="true">
         <span />
         <span />
@@ -1302,12 +1364,14 @@ function WriteView({
   onUploadDoodle,
   onSaveDoodle,
   onLoadDoodles,
+  onDeleteDoodle,
 }: {
   onSubmit: (text: string, mood: Status | null, diaryDate: string, weather: WeatherKey | null, moodTone: MoodTone | null, moodWords: string[], doodleUrl: string | null) => Promise<void>;
   profile: Profile | null;
   onUploadDoodle: (dataUrl: string) => Promise<string>;
-  onSaveDoodle: (dataUrl: string) => Promise<string>;
+  onSaveDoodle: (dataUrl: string) => Promise<SavedDoodle>;
   onLoadDoodles: () => Promise<SavedDoodle[]>;
+  onDeleteDoodle: (doodle: SavedDoodle) => Promise<void>;
 }) {
   const [text, setText] = useState("");
   const [diaryDate, setDiaryDate] = useState(() => localDateKey(new Date()));
@@ -1460,6 +1524,7 @@ function WriteView({
             profile={profile}
             onSaveDoodle={onSaveDoodle}
             onLoadDoodles={onLoadDoodles}
+            onDeleteDoodle={onDeleteDoodle}
           />
         </div>
         <div className="mood-temperature">
@@ -1515,19 +1580,22 @@ function DoodleComposer({
   profile,
   onSaveDoodle,
   onLoadDoodles,
+  onDeleteDoodle,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   image: string | null;
   onImageChange: (image: string | null) => void;
   profile: Profile | null;
-  onSaveDoodle: (dataUrl: string) => Promise<string>;
+  onSaveDoodle: (dataUrl: string) => Promise<SavedDoodle>;
   onLoadDoodles: () => Promise<SavedDoodle[]>;
+  onDeleteDoodle: (doodle: SavedDoodle) => Promise<void>;
 }) {
   const color = getUserColor(profile?.color_key);
   const [savedOpen, setSavedOpen] = useState(false);
   const [savedDoodles, setSavedDoodles] = useState<SavedDoodle[]>([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
+  const [deletingDoodleId, setDeletingDoodleId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
 
@@ -1560,6 +1628,22 @@ function DoodleComposer({
     }
   }
 
+  async function removeSavedDoodle(doodle: SavedDoodle) {
+    if (deletingDoodleId) return;
+    setDeletingDoodleId(doodle.id);
+    setMessage(null);
+    try {
+      await onDeleteDoodle(doodle);
+      setSavedDoodles((items) => items.filter((item) => item.id !== doodle.id));
+      if (image === doodle.imageUrl) onImageChange(null);
+      setMessage("这张已经从本子里撕掉了。");
+    } catch (deleteError) {
+      setMessage(isMissingDoodlesTableError(deleteError) ? "涂鸦库还没准备好。" : "这张暂时撕不下来。");
+    } finally {
+      setDeletingDoodleId(null);
+    }
+  }
+
   return (
     <section className={`doodle-compose ${open ? "is-open" : ""} ${image ? "has-doodle" : ""}`} style={colorVars(color, "doodle") as React.CSSProperties}>
       {!open && (
@@ -1588,10 +1672,10 @@ function DoodleComposer({
             image={image}
             onImageChange={onImageChange}
             onSaveDoodle={onSaveDoodle}
-            onSaved={(url) => {
-              onImageChange(url);
+            onSaved={(saved) => {
+              onImageChange(saved.imageUrl);
               setMessage("已经存进本子，下次也能用了。");
-              setSavedDoodles((items) => [{ id: url, imageUrl: url, createdAt: new Date().toISOString() }, ...items]);
+              setSavedDoodles((items) => [saved, ...items.filter((item) => item.id !== saved.id)]);
             }}
             onMessage={setMessage}
             libraryControl={
@@ -1608,16 +1692,27 @@ function DoodleComposer({
               {!loadingSaved && savedDoodles.length > 0 && (
                 <div className="doodle-library-grid">
                   {savedDoodles.map((doodle) => (
-                    <button
-                      type="button"
-                      key={doodle.id}
-                      onClick={() => {
-                        onImageChange(doodle.imageUrl);
-              setMessage("这张已经夹到这页了。");
-                      }}
-                    >
-                      <img src={doodle.imageUrl} alt="以前涂过的一张便利贴" />
-                    </button>
+                    <div className="doodle-library-item" key={doodle.id}>
+                      <button
+                        type="button"
+                        className="doodle-library-thumb"
+                        onClick={() => {
+                          onImageChange(doodle.imageUrl);
+                          setMessage("这张已经夹到这页了。");
+                        }}
+                      >
+                        <img src={doodle.imageUrl} alt="以前涂过的一张便利贴" />
+                      </button>
+                      <button
+                        type="button"
+                        className="doodle-library-delete"
+                        onClick={() => removeSavedDoodle(doodle)}
+                        disabled={deletingDoodleId === doodle.id}
+                        aria-label="删除这张涂鸦"
+                      >
+                        {deletingDoodleId === doodle.id ? "撕着" : "撕掉"}
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -1641,8 +1736,8 @@ function DoodlePad({
   color: ReturnType<typeof getUserColor>;
   image: string | null;
   onImageChange: (image: string | null) => void;
-  onSaveDoodle: (dataUrl: string) => Promise<string>;
-  onSaved: (url: string) => void;
+  onSaveDoodle: (dataUrl: string) => Promise<SavedDoodle>;
+  onSaved: (saved: SavedDoodle) => void;
   onMessage: (message: string | null) => void;
   libraryControl: React.ReactNode;
 }) {
@@ -1772,8 +1867,8 @@ function DoodlePad({
     setSaving(true);
     onMessage(null);
     try {
-      const url = await onSaveDoodle(dataUrl);
-      onSaved(url);
+      const saved = await onSaveDoodle(dataUrl);
+      onSaved(saved);
     } catch (saveError) {
       onMessage(isMissingDoodlesTableError(saveError) ? "涂鸦库还没准备好，先存到本地也可以。" : errorMessage(saveError));
     } finally {
@@ -2022,11 +2117,12 @@ function StampTrail({ stamps }: { stamps: { by: string; text: string; colorKey?:
       {stamps.map((stamp, index) => {
         const option = stampOptions.find((item) => item.name === stamp.text) ?? stampOptions[4];
         const Icon = option.icon;
+        const placement = stampPlacement(index);
         return (
           <span
             className={`stamp-mark stamp-${option.name}`}
             key={`${stamp.by}-${stamp.text}-${index}`}
-            style={colorVars(getUserColor(stamp.colorKey), "stamp") as React.CSSProperties}
+            style={{ ...colorVars(getUserColor(stamp.colorKey), "stamp"), ...placement } as React.CSSProperties}
           >
             <Icon size={15} />
             <small>{stamp.by} · {option.name === "读到了" ? "读到" : option.name}</small>
@@ -2037,6 +2133,33 @@ function StampTrail({ stamps }: { stamps: { by: string; text: string; colorKey?:
   );
 }
 
+function stampPlacement(index: number) {
+  const placements = [
+    { top: 0, right: 0, rotate: -7, scale: 0.92 },
+    { top: 34, right: 16, rotate: 5, scale: 0.9 },
+    { top: 66, right: -2, rotate: -2, scale: 0.86 },
+    { top: 22, right: -20, rotate: 9, scale: 0.82 },
+    { top: 52, right: 30, rotate: -11, scale: 0.8 },
+    { top: 84, right: 14, rotate: 4, scale: 0.78 },
+    { top: 8, right: 36, rotate: -15, scale: 0.76 },
+    { top: 72, right: -22, rotate: 12, scale: 0.76 },
+  ];
+  const base = placements[index] ?? {
+    top: 6 + ((index * 19) % 62),
+    right: -18 + ((index * 23) % 46),
+    rotate: -16 + ((index * 17) % 33),
+    scale: 0.7 + ((index % 3) * 0.03),
+  };
+
+  return {
+    "--stamp-top": `${base.top}px`,
+    "--stamp-right": `${base.right}px`,
+    "--stamp-rotate": `${base.rotate}deg`,
+    "--stamp-scale": String(base.scale),
+    "--stamp-layer": String(index + 1),
+  };
+}
+
 function DiaryPageMeta({ diaryDate, weather }: { diaryDate: string; weather?: string | null }) {
   const weatherOption = getWeatherOption(weather);
   const WeatherIcon = weatherOption?.icon;
@@ -2045,7 +2168,7 @@ function DiaryPageMeta({ diaryDate, weather }: { diaryDate: string; weather?: st
     <div className="diary-page-meta">
       <p>
         <span className="diary-meta-label">Date:</span>
-        <span className="diary-meta-value">{formatDiaryDate(diaryDate)}</span>
+        <span className="diary-meta-value">{formatDiaryDateWithWeekday(diaryDate)}</span>
       </p>
       {weatherOption && WeatherIcon && (
         <p>
@@ -2327,6 +2450,18 @@ function dataUrlToBlob(dataUrl: string) {
   return new Blob([bytes], { type: mime });
 }
 
+function doodleStoragePath(imageUrl: string) {
+  try {
+    const url = new URL(imageUrl);
+    const marker = "/storage/v1/object/public/doodles/";
+    const index = url.pathname.indexOf(marker);
+    if (index === -1) return null;
+    return decodeURIComponent(url.pathname.slice(index + marker.length));
+  } catch {
+    return null;
+  }
+}
+
 function isMissingDoodlesTableError(error: unknown) {
   const message = errorMessage(error);
   return message.includes("public.doodles") || message.includes("schema cache") || message.includes("Could not find the table");
@@ -2346,22 +2481,57 @@ const ambientPositions = [
 function notebookBackgroundStyle(members: Member[]) {
   if (!members.length) return undefined;
   const colors = members.map((member) => getUserColor(member.profile.color_key));
-  const opacity = Math.max(0.04, Math.min(0.1, 0.16 / colors.length));
+  const opacity = Math.max(0.06, Math.min(0.11, 0.22 / Math.sqrt(colors.length)));
   const washes = colors.map((color, index) => {
     const rgb = hexToRgb(color.ambient);
     const position = ambientPositions[index % ambientPositions.length];
-    const radius = 34 + (index % 4) * 4;
-    return `radial-gradient(circle at ${position}, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity.toFixed(3)}), transparent ${radius}%)`;
+    const radius = 42 + (index % 4) * 5;
+    return `radial-gradient(ellipse at ${position}, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity.toFixed(3)}) 0%, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${(opacity * 0.62).toFixed(3)}) 24%, transparent ${radius}%)`;
   });
 
   return {
     background: [
       ...washes,
-      "radial-gradient(circle at 50% 8%, rgba(255, 249, 239, 0.46), transparent 38%)",
+      "radial-gradient(circle at 50% 8%, rgba(255, 249, 239, 0.24), transparent 42%)",
       "linear-gradient(135deg, #f7f1e7 0%, #eef2e7 100%)",
     ].join(", "),
-    backgroundAttachment: "fixed",
+    backgroundAttachment: "scroll",
   } as React.CSSProperties;
+}
+
+function diaryPatternStyle(seed: string) {
+  const hash = stableHash(seed);
+  const layerCount = 3;
+  const images = Array.from({ length: layerCount }, (_, index) => {
+    const source = patternSources[(hash + index * 7) % patternSources.length];
+    const variant = patternVariants[(hash + index * 3) % patternVariants.length];
+    return `url("/patterns/units/${source}-${variant}.png")`;
+  });
+  const layoutIndex = hash % diaryPatternPositions.length;
+
+  return {
+    "--diary-pattern-images": images.join(", "),
+    "--diary-pattern-positions": diaryPatternPositions[layoutIndex].join(", "),
+    "--diary-pattern-sizes": diaryPatternSizes[layoutIndex].join(", "),
+  } as React.CSSProperties;
+}
+
+function randomWoodPatternStyle() {
+  const shuffled = [...woodPatternSources].sort(() => Math.random() - 0.5).slice(0, 2);
+  const images = shuffled.map((source) => `url("/patterns/wood/${source}.png")`);
+  return {
+    "--wood-pattern-images": images.join(", "),
+    "--wood-pattern-sizes": ["100% 100%", ...woodPatternSizes.slice(0, images.length)].join(", "),
+    "--wood-pattern-positions": ["left top", "left top", "38px 74px"].slice(0, images.length + 1).join(", "),
+  } as React.CSSProperties;
+}
+
+function stableHash(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
 }
 
 function hexToRgb(hex: string) {
@@ -2418,6 +2588,12 @@ function startOfLocalDay(date: Date) {
 function formatDiaryDate(value: string) {
   const date = parseDiaryDate(value);
   return [String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0"), date.getFullYear()].join("/");
+}
+
+function formatDiaryDateWithWeekday(value: string) {
+  const date = parseDiaryDate(value);
+  const weekdays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${weekdays[date.getDay()]}`;
 }
 
 function formatNoteTime(value: string) {

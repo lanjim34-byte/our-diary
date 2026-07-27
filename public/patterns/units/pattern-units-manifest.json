@@ -1,0 +1,226 @@
+﻿[
+    {
+        "source":  "floral-04",
+        "unit":  "01",
+        "x":  154,
+        "y":  148,
+        "width":  202,
+        "height":  305,
+        "outputs":  [
+                        "floral-04-unit-01-transparent.png",
+                        "floral-04-unit-01-brown.png",
+                        "floral-04-unit-01-cream.png",
+                        "floral-04-unit-01-green.png",
+                        "floral-04-unit-01-yellow.png",
+                        "floral-04-unit-01-pink.png"
+                    ]
+    },
+    {
+        "source":  "floral-05",
+        "unit":  "01",
+        "x":  404,
+        "y":  42,
+        "width":  167,
+        "height":  201,
+        "outputs":  [
+                        "floral-05-unit-01-transparent.png",
+                        "floral-05-unit-01-brown.png",
+                        "floral-05-unit-01-cream.png",
+                        "floral-05-unit-01-green.png",
+                        "floral-05-unit-01-yellow.png",
+                        "floral-05-unit-01-pink.png"
+                    ]
+    },
+    {
+        "source":  "floral-05",
+        "unit":  "02",
+        "x":  370,
+        "y":  292,
+        "width":  178,
+        "height":  427,
+        "outputs":  [
+                        "floral-05-unit-02-transparent.png",
+                        "floral-05-unit-02-brown.png",
+                        "floral-05-unit-02-cream.png",
+                        "floral-05-unit-02-green.png",
+                        "floral-05-unit-02-yellow.png",
+                        "floral-05-unit-02-pink.png"
+                    ]
+    },
+    {
+        "source":  "floral-05",
+        "unit":  "03",
+        "x":  208,
+        "y":  358,
+        "width":  163,
+        "height":  439,
+        "outputs":  [
+                        "floral-05-unit-03-transparent.png",
+                        "floral-05-unit-03-brown.png",
+                        "floral-05-unit-03-cream.png",
+                        "floral-05-unit-03-green.png",
+                        "floral-05-unit-03-yellow.png",
+                        "floral-05-unit-03-pink.png"
+                    ]
+    },
+    {
+        "source":  "floral-06",
+        "unit":  "01",
+        "x":  46,
+        "y":  25,
+        "width":  103,
+        "height":  127,
+        "outputs":  [
+                        "floral-06-unit-01-transparent.png",
+                        "floral-06-unit-01-brown.png",
+                        "floral-06-unit-01-cream.png",
+                        "floral-06-unit-01-green.png",
+                        "floral-06-unit-01-yellow.png",
+                        "floral-06-unit-01-pink.png"
+                    ]
+    },
+    {
+        "source":  "floral-06",
+        "unit":  "02",
+        "x":  173,
+        "y":  25,
+        "width":  129,
+        "height":  333,
+        "outputs":  [
+                        "floral-06-unit-02-transparent.png",
+                        "floral-06-unit-02-brown.png",
+                        "floral-06-unit-02-cream.png",
+                        "floral-06-unit-02-green.png",
+                        "floral-06-unit-02-yellow.png",
+                        "floral-06-unit-02-pink.png"
+                    ]
+    },
+    {
+        "source":  "floral-06",
+        "unit":  "03",
+        "x":  19,
+        "y":  204,
+        "width":  79,
+        "height":  137,
+        "outputs":  [
+                        "floral-06-unit-03-transparent.png",
+                        "floral-06-unit-03-brown.png",
+                        "floral-06-unit-03-cream.png",
+                        "floral-06-unit-03-green.png",
+                        "floral-06-unit-03-yellow.png",
+                        "floral-06-unit-03-pink.png"
+                    ]
+    },
+    {
+        "source":  "floral-06",
+        "unit":  "04",
+        "x":  14,
+        "y":  352,
+        "width":  98,
+        "height":  170,
+        "outputs":  [
+                        "floral-06-unit-04-transparent.png",
+                        "floral-06-unit-04-brown.png",
+                        "floral-06-unit-04-cream.png",
+                        "floral-06-unit-04-green.png",
+                        "floral-06-unit-04-yellow.png",
+                        "floral-06-unit-04-pink.png"
+                    ]
+    },
+    {
+        "source":  "floral-06",
+        "unit":  "05",
+        "x":  186,
+        "y":  354,
+        "width":  106,
+        "height":  168,
+        "outputs":  [
+                        "floral-06-unit-05-transparent.png",
+                        "floral-06-unit-05-brown.png",
+                        "floral-06-unit-05-cream.png",
+                        "floral-06-unit-05-green.png",
+                        "floral-06-unit-05-yellow.png",
+                        "floral-06-unit-05-pink.png"
+                    ]
+    },
+    {
+        "source":  "floral-14",
+        "unit":  "01",
+        "x":  100,
+        "y":  12,
+        "width":  114,
+        "height":  200,
+        "outputs":  [
+                        "floral-14-unit-01-transparent.png",
+                        "floral-14-unit-01-brown.png",
+                        "floral-14-unit-01-cream.png",
+                        "floral-14-unit-01-green.png",
+                        "floral-14-unit-01-yellow.png",
+                        "floral-14-unit-01-pink.png"
+                    ]
+    },
+    {
+        "source":  "floral-14",
+        "unit":  "02",
+        "x":  237,
+        "y":  20,
+        "width":  167,
+        "height":  220,
+        "outputs":  [
+                        "floral-14-unit-02-transparent.png",
+                        "floral-14-unit-02-brown.png",
+                        "floral-14-unit-02-cream.png",
+                        "floral-14-unit-02-green.png",
+                        "floral-14-unit-02-yellow.png",
+                        "floral-14-unit-02-pink.png"
+                    ]
+    },
+    {
+        "source":  "floral-14",
+        "unit":  "03",
+        "x":  380,
+        "y":  114,
+        "width":  84,
+        "height":  75,
+        "outputs":  [
+                        "floral-14-unit-03-transparent.png",
+                        "floral-14-unit-03-brown.png",
+                        "floral-14-unit-03-cream.png",
+                        "floral-14-unit-03-green.png",
+                        "floral-14-unit-03-yellow.png",
+                        "floral-14-unit-03-pink.png"
+                    ]
+    },
+    {
+        "source":  "floral-14",
+        "unit":  "04",
+        "x":  273,
+        "y":  251,
+        "width":  123,
+        "height":  129,
+        "outputs":  [
+                        "floral-14-unit-04-transparent.png",
+                        "floral-14-unit-04-brown.png",
+                        "floral-14-unit-04-cream.png",
+                        "floral-14-unit-04-green.png",
+                        "floral-14-unit-04-yellow.png",
+                        "floral-14-unit-04-pink.png"
+                    ]
+    },
+    {
+        "source":  "floral-14",
+        "unit":  "05",
+        "x":  36,
+        "y":  292,
+        "width":  136,
+        "height":  184,
+        "outputs":  [
+                        "floral-14-unit-05-transparent.png",
+                        "floral-14-unit-05-brown.png",
+                        "floral-14-unit-05-cream.png",
+                        "floral-14-unit-05-green.png",
+                        "floral-14-unit-05-yellow.png",
+                        "floral-14-unit-05-pink.png"
+                    ]
+    }
+]

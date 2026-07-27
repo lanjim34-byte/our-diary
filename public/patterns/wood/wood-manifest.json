@@ -1,0 +1,26 @@
+﻿[
+    {
+        "source":  "Screenshot 2026-07-27 162448.png",
+        "output":  "wood-01-tile.png",
+        "edgeOutput":  "wood-01-edge.png",
+        "size":  720
+    },
+    {
+        "source":  "Screenshot 2026-07-27 162459.png",
+        "output":  "wood-02-tile.png",
+        "edgeOutput":  "wood-02-edge.png",
+        "size":  720
+    },
+    {
+        "source":  "Screenshot 2026-07-27 162512.png",
+        "output":  "wood-03-tile.png",
+        "edgeOutput":  "wood-03-edge.png",
+        "size":  720
+    },
+    {
+        "source":  "Screenshot 2026-07-27 162531.png",
+        "output":  "wood-04-tile.png",
+        "edgeOutput":  "wood-04-edge.png",
+        "size":  720
+    }
+]
