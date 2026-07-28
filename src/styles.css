@@ -86,9 +86,9 @@ button {
   min-height: 100vh;
   padding: 0 0 112px;
   background:
-    radial-gradient(circle at 18% 12%, rgba(245, 205, 166, 0.25), transparent 38%),
-    radial-gradient(circle at 88% 18%, rgba(205, 230, 190, 0.24), transparent 36%),
-    linear-gradient(135deg, rgba(249, 239, 224, 0.74) 0%, rgba(238, 245, 229, 0.74) 100%);
+    radial-gradient(ellipse at 22% 10%, rgba(255, 237, 206, 0.18), transparent 42%),
+    radial-gradient(ellipse at 78% 28%, rgba(188, 132, 72, 0.08), transparent 48%),
+    linear-gradient(135deg, #ead2ad 0%, #d7b985 46%, #c9a46f 100%);
   background-attachment: scroll;
 }
 
@@ -617,7 +617,7 @@ small {
   min-height: 360px;
   padding: 56px 28px 42px 34px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 3px;
   background:
     radial-gradient(ellipse at 16% 76%, color-mix(in srgb, var(--person-paper) 34%, transparent), transparent 42%),
     radial-gradient(ellipse at 86% 84%, color-mix(in srgb, var(--person-light) 22%, transparent), transparent 46%),
@@ -1740,7 +1740,7 @@ small {
   z-index: 1;
   width: 78px;
   height: 78px;
-  border: 1px solid color-mix(in srgb, var(--doodle-light) 82%, var(--paper-border-soft));
+  border: 0;
   border-radius: 2px;
   background:
     radial-gradient(circle at 20% 18%, rgba(255, 255, 255, 0.46), transparent 38%),
@@ -2342,11 +2342,12 @@ small {
   left: 0;
   z-index: 5;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 180px));
+  justify-content: center;
   gap: 6px;
-  width: min(100%, 760px);
-  margin: 0 auto;
-  padding: 9px 10px 12px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px 12px;
   border-top: 1px solid var(--paper-border-soft);
   background: color-mix(in srgb, var(--paper-surface) 92%, transparent);
   backdrop-filter: blur(16px);
@@ -2420,6 +2421,119 @@ small {
   }
 }
 
+@media (max-width: 900px) {
+  .compose-paper-stage.doodle-is-open {
+    --doodle-mobile-note-size: min(58vw, 290px);
+    padding-bottom: 10px;
+  }
+
+  .doodle-compose {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    z-index: 1;
+    width: min(100%, 260px);
+    min-height: 74px;
+    margin: -30px 10px -14px auto;
+  }
+
+  .doodle-compose.is-open {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    z-index: 3;
+    width: 100%;
+    min-height: 0;
+    margin: 12px auto 4px;
+    pointer-events: auto;
+  }
+
+  .doodle-peek-zone {
+    height: 74px;
+  }
+
+  .doodle-peek {
+    right: 8px;
+    top: 0;
+    bottom: auto;
+    width: 64px;
+    height: 64px;
+  }
+
+  .doodle-hand-cue {
+    right: 74px;
+    bottom: 8px;
+    font-size: 18px;
+    transform: rotate(-3deg);
+  }
+
+  .doodle-hand-cue svg {
+    width: 54px;
+    height: 31px;
+    margin-top: 2px;
+    margin-left: -4px;
+  }
+
+  .doodle-compose.has-doodle .doodle-peek {
+    right: 7px;
+    top: 0;
+    bottom: auto;
+  }
+
+  .doodle-drawer {
+    padding: 2px 0 0;
+    transform: rotate(-0.5deg);
+  }
+
+  .doodle-pad {
+    grid-template-columns: 58px var(--doodle-mobile-note-size) 82px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .doodle-pad canvas {
+    width: var(--doodle-mobile-note-size);
+    transform: rotate(-0.4deg);
+  }
+
+  .doodle-tools {
+    display: grid;
+    gap: 7px;
+    width: 100%;
+  }
+
+  .doodle-tools button,
+  .doodle-library-row button {
+    width: 100%;
+    max-width: none;
+    padding: 6px 6px;
+    font-size: 15px;
+    white-space: normal;
+    line-height: 1.15;
+  }
+
+  .doodle-library-row {
+    position: static;
+    width: auto;
+    justify-items: center;
+    margin-top: 0;
+  }
+
+  .doodle-library {
+    position: static;
+    width: min(100%, 330px);
+    max-height: 150px;
+    overflow: auto;
+    justify-self: center;
+  }
+
+  .doodle-message {
+    max-width: 300px;
+  }
+}
+
 @media (max-width: 720px) {
   .member-strip {
     display: grid;
@@ -2461,6 +2575,16 @@ small {
     padding-bottom: 10px;
   }
 
+  .doodle-compose {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    z-index: 1;
+    width: min(100%, 260px);
+    min-height: 74px;
+    margin: -30px 10px -14px auto;
+  }
+
   .doodle-compose.is-open {
     position: relative;
     top: auto;
@@ -2472,6 +2596,39 @@ small {
     margin: 12px auto 4px;
     pointer-events: auto;
   }
+
+  .doodle-peek-zone {
+    height: 74px;
+  }
+
+  .doodle-peek {
+    right: 8px;
+    top: 0;
+    bottom: auto;
+    width: 64px;
+    height: 64px;
+  }
+
+  .doodle-hand-cue {
+    right: 74px;
+    bottom: 8px;
+    font-size: 18px;
+    transform: rotate(-3deg);
+  }
+
+  .doodle-hand-cue svg {
+    width: 54px;
+    height: 31px;
+    margin-top: 2px;
+    margin-left: -4px;
+  }
+
+  .doodle-compose.has-doodle .doodle-peek {
+    right: 7px;
+    top: 0;
+    bottom: auto;
+  }
+
 
   .doodle-drawer {
     padding: 2px 0 0;
@@ -2605,9 +2762,8 @@ small {
   }
 
   .doodle-compose {
-    right: -14px;
-    bottom: 30px;
-    width: 184px;
+    width: min(100%, 236px);
+    margin: -28px 4px -12px auto;
   }
 
   .doodle-compose.is-open {
@@ -2623,19 +2779,20 @@ small {
   }
 
   .doodle-peek-zone {
-    height: 88px;
+    height: 70px;
   }
 
   .doodle-peek {
-    right: -28px;
-    bottom: 14px;
-    width: 66px;
-    height: 66px;
+    right: 7px;
+    top: 0;
+    bottom: auto;
+    width: 62px;
+    height: 62px;
   }
 
   .doodle-hand-cue {
-    right: 42px;
-    bottom: 16px;
+    right: 70px;
+    bottom: 8px;
     font-size: 17px;
   }
 

@@ -1602,14 +1602,21 @@ function DoodleComposer({
   useEffect(() => {
     if (!open) return;
 
-    function closeWhenOutside(event: PointerEvent) {
+    const scrollTimer = window.setTimeout(() => {
+      drawerRef.current?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    }, 80);
+
+    function closeWhenOutside(event: MouseEvent) {
       const target = event.target as Node;
       if (drawerRef.current?.contains(target)) return;
       onOpenChange(false);
     }
 
-    document.addEventListener("pointerdown", closeWhenOutside);
-    return () => document.removeEventListener("pointerdown", closeWhenOutside);
+    document.addEventListener("click", closeWhenOutside);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      document.removeEventListener("click", closeWhenOutside);
+    };
   }, [open, onOpenChange]);
 
   async function toggleSavedDoodles() {
@@ -1656,7 +1663,15 @@ function DoodleComposer({
               <path d="M78 32c-4-7-9-12-17-16" />
             </svg>
           </div>
-          <button type="button" className="doodle-peek" aria-label="涂一下" onClick={() => onOpenChange(true)}>
+          <button
+            type="button"
+            className="doodle-peek"
+            aria-label="涂一下"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenChange(true);
+            }}
+          >
             <span />
           </button>
         </div>
