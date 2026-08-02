@@ -86,27 +86,9 @@ button {
   min-height: 100vh;
   padding: 0 0 112px;
   background:
-    radial-gradient(ellipse at 22% 10%, rgba(255, 237, 206, 0.18), transparent 42%),
-    radial-gradient(ellipse at 78% 28%, rgba(188, 132, 72, 0.08), transparent 48%),
-    linear-gradient(135deg, #ead2ad 0%, #d7b985 46%, #c9a46f 100%);
+    radial-gradient(circle at 50% 8%, rgba(255, 249, 239, 0.24), transparent 42%),
+    linear-gradient(135deg, #f7f1e7 0%, #eef2e7 100%);
   background-attachment: scroll;
-}
-
-.app::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  min-height: 100%;
-  background-image:
-    linear-gradient(rgba(255, 247, 232, 0.08), rgba(255, 247, 232, 0.08)),
-    var(--wood-pattern-images, url("/patterns/wood/wood-01-edge.png"));
-  background-repeat: repeat, repeat;
-  background-position: var(--wood-pattern-positions, left top);
-  background-size: var(--wood-pattern-sizes, 560px 560px);
-  opacity: 0.32;
-  mix-blend-mode: multiply;
 }
 
 .phone-shell {
@@ -709,7 +691,7 @@ small {
   width: 15px;
   height: 15px;
   border-radius: 50%;
-  background: #f3eee5;
+  background: var(--page-hole-bg, #ecebe5);
   box-shadow:
     inset 0 1px 2px rgba(78, 60, 44, 0.16),
     0 0 0 1px rgba(135, 111, 88, 0.08),
@@ -1438,6 +1420,7 @@ small {
   color: #fffaf3;
   background: #805c41;
   font-family: var(--font-ui);
+  min-height: 38px;
 }
 
 .inline-form button {
@@ -2270,9 +2253,72 @@ small {
 }
 
 .friend-switch {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0 4px;
+  margin: 0 0 -1px;
+  padding: 0 12px;
+  overflow: visible;
+}
+
+.friends-folder {
+  gap: 0;
+}
+
+.friend-switch .friend-name-card {
+  position: relative;
+  z-index: 1;
+  flex: 0 1 152px;
+  min-height: 42px;
+  margin-right: 0;
+  padding: 8px 14px 9px;
+  border: 1px solid color-mix(in srgb, var(--person-light) 58%, rgba(194, 173, 151, 0.66));
+  border-bottom-color: color-mix(in srgb, var(--person-light) 30%, rgba(194, 173, 151, 0.28));
+  border-radius: 0;
+  color: color-mix(in srgb, var(--person-base) 54%, var(--ink-soft));
+  background:
+    radial-gradient(circle at 78% 10%, rgba(255, 255, 255, 0.32), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--person-paper-soft) 70%, var(--paper-surface)), color-mix(in srgb, var(--person-paper) 30%, var(--paper-surface-warm)));
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.36), 0 2px 5px rgba(89, 62, 37, 0.032);
+  font-family: var(--font-hand);
+  font-size: var(--font-size-hand-chip);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.12;
+  text-align: center;
+  opacity: 0.82;
+  transform: translateY(4px) rotate(var(--tab-tilt, -0.4deg));
+  transform-origin: bottom center;
+  transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease, opacity 150ms ease;
+}
+
+.friend-switch .friend-name-card.active {
+  z-index: 6;
+  min-height: 48px;
+  border-color: color-mix(in srgb, var(--person-light) 68%, rgba(194, 173, 151, 0.7));
+  border-bottom-color: color-mix(in srgb, var(--person-paper-soft) 72%, var(--paper-surface));
+  border-radius: 0;
+  color: color-mix(in srgb, var(--person-base) 70%, var(--ink-main));
+  background: color-mix(in srgb, var(--person-paper-soft) 72%, var(--paper-surface));
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.42);
+  opacity: 1;
+  transform: translateY(0) rotate(0deg);
+}
+
+.friend-folder-page {
+  position: relative;
+  z-index: 3;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  gap: 16px;
+  margin-top: 0;
+  padding: 16px 12px 12px;
+  border: 1px solid color-mix(in srgb, var(--person-light) 66%, rgba(194, 173, 151, 0.62));
+  border-radius: 0 0 7px 7px;
+  background: color-mix(in srgb, var(--person-paper-soft) 72%, var(--paper-surface));
+  box-shadow: 0 8px 18px rgba(89, 62, 37, 0.035);
+  --page-hole-bg: color-mix(in srgb, var(--person-paper-soft) 72%, var(--paper-surface));
 }
 
 .profile-panel,

@@ -14,7 +14,7 @@ import {
   Star,
   UserRound,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { hasSupabaseEnv, supabase } from "./supabaseClient";
 import { defaultUserColor, getUserColor, stableColorKey, userColors, type UserColorKey } from "./constants/userColors";
@@ -129,9 +129,6 @@ const diaryPatternSizes = [
   ["118px auto", "82px auto", "76px auto"],
   ["98px auto", "96px auto", "68px auto"],
 ];
-const woodPatternSources = ["wood-01-edge", "wood-02-edge", "wood-03-edge", "wood-04-edge"];
-const woodPatternSizes = ["460px 460px", "620px 620px", "780px 780px"];
-
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -150,7 +147,6 @@ function App() {
   const [inviteCopied, setInviteCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const woodPatternStyle = useMemo(() => randomWoodPatternStyle(), []);
   useEffect(() => {
     setAvatarDoodles(loadLocalAvatarDoodles());
   }, []);
@@ -601,7 +597,7 @@ function App() {
   }
 
   return (
-    <div className="app" style={{ ...notebookBackgroundStyle(members), ...woodPatternStyle }}>
+    <div className="app" style={notebookBackgroundStyle(members)}>
       <main className="phone-shell">
         <header className="topbar">
           <div>
@@ -709,42 +705,39 @@ function App() {
         )}
 
         {tab === "friends" && (
-          <section className="stack">
+          <section className="stack friends-folder">
             <div className="friend-switch">
-              {sortedMembers.map((member) => (
-                <button key={member.user_id} className={member.user_id === selectedPersonId ? "active" : ""} onClick={() => setSelectedPersonId(member.user_id)}>
+              {sortedMembers.map((member, index) => (
+                <button
+                  key={member.user_id}
+                  className={`friend-name-card ${member.user_id === selectedPersonId ? "active" : ""}`}
+                  style={{ ...personStyle(member.profile), "--tab-tilt": `${index % 2 === 0 ? -0.45 : 0.35}deg` } as React.CSSProperties}
+                  onClick={() => setSelectedPersonId(member.user_id)}
+                >
                   {member.profile.display_name}
                 </button>
               ))}
             </div>
-            {selectedMember && (
-              <article className="profile-panel" style={personStyle(selectedMember.profile)}>
-                <AvatarSticker profile={selectedMember.profile} imageUrl={selectedMember.profile.avatar_doodle_url ?? avatarDoodles[selectedMember.user_id]} large />
-                <div>
-                  <p className="eyebrow">最近在本子里写过</p>
-                  <h2>{selectedMember.profile.display_name}</h2>
-                </div>
-              </article>
-            )}
-            <h3 className="section-title">这一页</h3>
-            {selectedMemberDiaries.length === 0 && <EmptyState title="这一页还空着" text="等 ta 写下第一句话。" />}
-            {selectedMemberDiaries.map((diary) => (
-              <DiaryEntry
-                key={diary.id}
-                diary={diary}
-                author={memberFor(members, diary.authorId)}
-                currentUserId={session.user.id}
-                expanded={openDiaryId === diary.id}
-                onToggle={() => setOpenDiaryId(openDiaryId === diary.id ? null : diary.id)}
-                onPerson={() => undefined}
-                onStamp={(text) => addStamp(diary.id, text)}
-                onNote={(text) => addPaperNote(diary.id, text)}
-                onFollowUp={(text) => addFollowUp(diary.id, text)}
-                onHighlight={(start, end) => addHighlight(diary.id, start, end)}
-                onDoodlePreview={setDoodlePreview}
-                onDelete={() => deleteDiary(diary.id)}
-              />
-            ))}
+            <div className="friend-folder-page" style={selectedMember ? personStyle(selectedMember.profile) : undefined}>
+              {selectedMemberDiaries.length === 0 && <EmptyState title="这一页还空着" text="等 ta 写下第一句话。" />}
+              {selectedMemberDiaries.map((diary) => (
+                <DiaryEntry
+                  key={diary.id}
+                  diary={diary}
+                  author={memberFor(members, diary.authorId)}
+                  currentUserId={session.user.id}
+                  expanded={openDiaryId === diary.id}
+                  onToggle={() => setOpenDiaryId(openDiaryId === diary.id ? null : diary.id)}
+                  onPerson={() => undefined}
+                  onStamp={(text) => addStamp(diary.id, text)}
+                  onNote={(text) => addPaperNote(diary.id, text)}
+                  onFollowUp={(text) => addFollowUp(diary.id, text)}
+                  onHighlight={(start, end) => addHighlight(diary.id, start, end)}
+                  onDoodlePreview={setDoodlePreview}
+                  onDelete={() => deleteDiary(diary.id)}
+                />
+              ))}
+            </div>
           </section>
         )}
 
@@ -2496,22 +2489,42 @@ const ambientPositions = [
 function notebookBackgroundStyle(members: Member[]) {
   if (!members.length) return undefined;
   const colors = members.map((member) => getUserColor(member.profile.color_key));
-  const opacity = Math.max(0.06, Math.min(0.11, 0.22 / Math.sqrt(colors.length)));
+  const opacity = Math.max(0.085, Math.min(0.15, 0.3 / Math.sqrt(colors.length)));
   const washes = colors.map((color, index) => {
     const rgb = hexToRgb(color.ambient);
     const position = ambientPositions[index % ambientPositions.length];
-    const radius = 42 + (index % 4) * 5;
-    return `radial-gradient(ellipse at ${position}, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity.toFixed(3)}) 0%, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${(opacity * 0.62).toFixed(3)}) 24%, transparent ${radius}%)`;
+    const radius = 48 + (index % 4) * 6;
+    return `radial-gradient(ellipse at ${position}, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity.toFixed(3)}) 0%, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${(opacity * 0.72).toFixed(3)}) 28%, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${(opacity * 0.28).toFixed(3)}) 46%, transparent ${radius}%)`;
   });
 
   return {
     background: [
       ...washes,
-      "radial-gradient(circle at 50% 8%, rgba(255, 249, 239, 0.24), transparent 42%)",
-      "linear-gradient(135deg, #f7f1e7 0%, #eef2e7 100%)",
+      "radial-gradient(circle at 50% 8%, rgba(250, 250, 247, 0.16), transparent 42%)",
+      "linear-gradient(135deg, #f1f0ea 0%, #e8ede8 48%, #ece9e2 100%)",
     ].join(", "),
     backgroundAttachment: "scroll",
+    "--page-hole-bg": backgroundHoleColor(colors),
   } as React.CSSProperties;
+}
+
+function backgroundHoleColor(colors: ReturnType<typeof getUserColor>[]) {
+  const base = { r: 236, g: 237, b: 232 };
+  const average = colors.reduce(
+    (sum, color) => {
+      const rgb = hexToRgb(color.ambient);
+      return { r: sum.r + rgb.r, g: sum.g + rgb.g, b: sum.b + rgb.b };
+    },
+    { r: 0, g: 0, b: 0 },
+  );
+  const count = Math.max(colors.length, 1);
+  const strength = Math.max(0.1, Math.min(0.18, 0.26 / Math.sqrt(count)));
+  const mixed = {
+    r: Math.round(base.r * (1 - strength) + (average.r / count) * strength),
+    g: Math.round(base.g * (1 - strength) + (average.g / count) * strength),
+    b: Math.round(base.b * (1 - strength) + (average.b / count) * strength),
+  };
+  return `rgb(${mixed.r}, ${mixed.g}, ${mixed.b})`;
 }
 
 function diaryPatternStyle(seed: string) {
@@ -2528,16 +2541,6 @@ function diaryPatternStyle(seed: string) {
     "--diary-pattern-images": images.join(", "),
     "--diary-pattern-positions": diaryPatternPositions[layoutIndex].join(", "),
     "--diary-pattern-sizes": diaryPatternSizes[layoutIndex].join(", "),
-  } as React.CSSProperties;
-}
-
-function randomWoodPatternStyle() {
-  const shuffled = [...woodPatternSources].sort(() => Math.random() - 0.5).slice(0, 2);
-  const images = shuffled.map((source) => `url("/patterns/wood/${source}.png")`);
-  return {
-    "--wood-pattern-images": images.join(", "),
-    "--wood-pattern-sizes": ["100% 100%", ...woodPatternSizes.slice(0, images.length)].join(", "),
-    "--wood-pattern-positions": ["left top", "left top", "38px 74px"].slice(0, images.length + 1).join(", "),
   } as React.CSSProperties;
 }
 
