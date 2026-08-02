@@ -14,7 +14,7 @@ import {
   Star,
   UserRound,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { hasSupabaseEnv, supabase } from "./supabaseClient";
 import { defaultUserColor, getUserColor, stableColorKey, userColors, type UserColorKey } from "./constants/userColors";
@@ -57,9 +57,9 @@ type Diary = {
   diaryDate: string;
   weather?: string | null;
   doodleUrl?: string | null;
-  responses: { by: string; text: string; colorKey?: string | null; authorId?: string; createdAt?: string }[];
-  comments: { by: string; text: string; time: string; colorKey?: string | null; authorId?: string; createdAt?: string }[];
-  followUps: { by: string; text: string; time: string; authorId?: string; createdAt?: string }[];
+  responses: { id?: string; by: string; text: string; colorKey?: string | null; authorId?: string; createdAt?: string }[];
+  comments: { id?: string; by: string; text: string; time: string; colorKey?: string | null; authorId?: string; createdAt?: string }[];
+  followUps: { id?: string; by: string; text: string; time: string; authorId?: string; createdAt?: string }[];
   highlights: HighlightRange[];
   createdAt: string;
 };
@@ -256,6 +256,7 @@ function App() {
         responses: stamps
           .filter((stamp: any) => stamp.diary_id === entry.id)
           .map((stamp: any) => ({
+            id: stamp.id,
             by: profilesById.get(stamp.author_id)?.display_name ?? "朋友",
             text: stamp.stamp_type,
             colorKey: profilesById.get(stamp.author_id)?.color_key,
@@ -265,6 +266,7 @@ function App() {
         comments: paperNotes
           .filter((note: any) => note.diary_id === entry.id)
           .map((note: any) => ({
+            id: note.id,
             by: profilesById.get(note.author_id)?.display_name ?? "朋友",
             text: note.content,
             time: formatNoteTime(note.created_at),
@@ -275,6 +277,7 @@ function App() {
         followUps: followups
           .filter((followup: any) => followup.diary_id === entry.id)
           .map((followup: any) => ({
+            id: followup.id,
             by: profilesById.get(followup.author_id)?.display_name ?? "朋友",
             text: followup.content,
             time: formatNoteTime(followup.created_at),
@@ -312,6 +315,186 @@ function App() {
       loadNotebookData(activeNotebook);
     }
   }, [activeNotebook, loadNotebookData]);
+
+  useEffect(() => {
+    if (!supabase || !activeNotebook || !session?.user) return;
+    const realtimeClient = supabase;
+    const profilesById = new Map(members.map((member) => [member.user_id, member.profile]));
+    const currentUserId = session.user.id;
+    const notebookId = activeNotebook.id;
+    const channel = realtimeClient
+      .channel(`notebook-live-${notebookId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "diary_entries", filter: `notebook_id=eq.${notebookId}` },
+        (payload) => {
+          const entry: any = payload.new;
+          if (!entry || entry.author_id === currentUserId) return;
+          const authorProfile = profilesById.get(entry.author_id);
+          setDiaries((items) => {
+            if (items.some((item) => item.id === entry.id)) return items;
+            const nextDiary: Diary = {
+              id: entry.id,
+              authorId: entry.author_id,
+              text: entry.content,
+              status: isStatus(entry.mood) ? entry.mood : null,
+              moodTone: getMoodToneOption(entry.mood_tone)?.key ?? null,
+              moodWords: parseMoodWords(entry.mood_words),
+              diaryDate: entry.diary_date || localDateKey(new Date(entry.created_at)),
+              weather: entry.weather,
+              doodleUrl: entry.doodle_url ?? null,
+              createdAt: entry.created_at,
+              responses: [],
+              comments: [],
+              followUps: [],
+              highlights: [],
+            };
+            return [...items, nextDiary].sort(compareDiaries);
+          });
+          if (!authorProfile) {
+            setMembers((items) =>
+              items.some((member) => member.user_id === entry.author_id)
+                ? items
+                : [...items, { user_id: entry.author_id, role: "member", profile: fallbackProfile(entry.author_id) }],
+            );
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "diary_entries", filter: `notebook_id=eq.${notebookId}` },
+        (payload) => {
+          const entry: any = payload.new;
+          if (!entry || entry.author_id === currentUserId) return;
+          setDiaries((items) =>
+            items.map((item) =>
+              item.id === entry.id
+                ? {
+                    ...item,
+                    text: entry.content,
+                    status: isStatus(entry.mood) ? entry.mood : null,
+                    moodTone: getMoodToneOption(entry.mood_tone)?.key ?? null,
+                    moodWords: parseMoodWords(entry.mood_words),
+                    diaryDate: entry.diary_date || localDateKey(new Date(entry.created_at)),
+                    weather: entry.weather,
+                    doodleUrl: entry.doodle_url ?? null,
+                    createdAt: entry.created_at,
+                  }
+                : item,
+            ),
+          );
+        },
+      )
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "paper_notes" }, (payload) => {
+        const note: any = payload.new;
+        if (!note || note.author_id === currentUserId) return;
+        const noteProfile = profilesById.get(note.author_id);
+        setDiaries((items) =>
+          items.map((item) =>
+            item.id === note.diary_id
+              ? {
+                  ...item,
+                  comments: item.comments.some((comment) => comment.id === note.id)
+                    ? item.comments
+                    : [
+                        ...item.comments,
+                        {
+                          id: note.id,
+                          by: noteProfile?.display_name ?? "朋友",
+                          text: note.content,
+                          time: formatNoteTime(note.created_at),
+                          colorKey: noteProfile?.color_key,
+                          authorId: note.author_id,
+                          createdAt: note.created_at,
+                        },
+                      ],
+                }
+            : item,
+          ),
+        );
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "diary_followups" }, (payload) => {
+        const followup: any = payload.new;
+        if (!followup || followup.author_id === currentUserId) return;
+        const followupProfile = profilesById.get(followup.author_id);
+        setDiaries((items) =>
+          items.map((item) =>
+            item.id === followup.diary_id
+              ? {
+                  ...item,
+                  followUps: item.followUps.some((entry) => entry.id === followup.id)
+                    ? item.followUps
+                    : [
+                        ...item.followUps,
+                        {
+                          id: followup.id,
+                          by: followupProfile?.display_name ?? "朋友",
+                          text: followup.content,
+                          time: formatNoteTime(followup.created_at),
+                          authorId: followup.author_id,
+                          createdAt: followup.created_at,
+                        },
+                      ],
+                }
+              : item,
+          ),
+        );
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "stamps" }, (payload) => {
+        const stamp: any = payload.new;
+        if (!stamp || stamp.author_id === currentUserId) return;
+        const stampProfile = profilesById.get(stamp.author_id);
+        setDiaries((items) =>
+          items.map((item) =>
+            item.id === stamp.diary_id
+              ? {
+                  ...item,
+                  responses: item.responses.some((response) => response.id === stamp.id)
+                    ? item.responses
+                    : [
+                        ...item.responses,
+                        {
+                          id: stamp.id,
+                          by: stampProfile?.display_name ?? "朋友",
+                          text: stamp.stamp_type,
+                          colorKey: stampProfile?.color_key,
+                          authorId: stamp.author_id,
+                          createdAt: stamp.created_at,
+                        },
+                      ],
+                }
+              : item,
+          ),
+        );
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "highlights" }, (payload) => {
+        const highlight: any = payload.new;
+        if (!highlight || highlight.author_id === currentUserId) return;
+        const highlightProfile = profilesById.get(highlight.author_id);
+        setDiaries((items) =>
+          items.map((item) =>
+            item.id === highlight.diary_id
+              ? item.highlights.some((range) => range.id === highlight.id)
+                ? item
+                : {
+                    ...item,
+                    highlights: mergeHighlights(item.highlights, {
+                      id: highlight.id,
+                      start: highlight.start_index,
+                      end: highlight.end_index,
+                      colorKey: highlightProfile?.color_key,
+                    }),
+                  }
+              : item,
+          ),
+        );
+      })
+      .subscribe();
+
+    return () => {
+      realtimeClient.removeChannel(channel);
+    };
+  }, [activeNotebook, session?.user?.id, members]);
 
   async function createNotebook(name: string) {
     if (!supabase || !session?.user) return;
@@ -451,51 +634,178 @@ function App() {
 
   async function addFollowUp(diaryId: string, text: string) {
     if (!supabase || !activeNotebook || !session?.user) return;
-    const { error: insertError } = await supabase.from("diary_followups").insert({
-      diary_id: diaryId,
-      author_id: session.user.id,
-      content: text,
-    });
-    if (insertError) setError(errorMessage(insertError));
-    await loadNotebookData(activeNotebook);
+    const tempId = `optimistic-followup-${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    const authorName = profile?.display_name ?? "我";
+    setDiaries((items) =>
+      items.map((item) =>
+        item.id === diaryId
+          ? {
+              ...item,
+              followUps: [...item.followUps, { id: tempId, by: authorName, text, time: formatNoteTime(createdAt), authorId: session.user.id, createdAt }],
+            }
+          : item,
+      ),
+    );
+    const { data, error: insertError } = await supabase
+      .from("diary_followups")
+      .insert({
+        diary_id: diaryId,
+        author_id: session.user.id,
+        content: text,
+      })
+      .select("id,created_at")
+      .single();
+    if (insertError) {
+      setDiaries((items) =>
+        items.map((item) =>
+          item.id === diaryId ? { ...item, followUps: item.followUps.filter((followup) => followup.id !== tempId) } : item,
+        ),
+      );
+      setError(errorMessage(insertError));
+      return;
+    }
+    setDiaries((items) =>
+      items.map((item) =>
+        item.id === diaryId
+          ? {
+              ...item,
+              followUps: item.followUps.map((followup) =>
+                followup.id === tempId ? { ...followup, id: data.id, createdAt: data.created_at, time: formatNoteTime(data.created_at) } : followup,
+              ),
+            }
+          : item,
+      ),
+    );
   }
 
   async function addPaperNote(diaryId: string, text: string) {
     if (!supabase || !activeNotebook || !session?.user) return;
-    const { error: insertError } = await supabase.from("paper_notes").insert({
-      diary_id: diaryId,
-      author_id: session.user.id,
-      content: text,
-    });
-    if (insertError) setError(errorMessage(insertError));
-    await loadNotebookData(activeNotebook);
+    const tempId = `optimistic-note-${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    const authorName = profile?.display_name ?? "我";
+    const authorColor = profile?.color_key ?? null;
+    setDiaries((items) =>
+      items.map((item) =>
+        item.id === diaryId
+          ? {
+              ...item,
+              comments: [
+                ...item.comments,
+                { id: tempId, by: authorName, text, time: formatNoteTime(createdAt), colorKey: authorColor, authorId: session.user.id, createdAt },
+              ],
+            }
+          : item,
+      ),
+    );
+    const { data, error: insertError } = await supabase
+      .from("paper_notes")
+      .insert({
+        diary_id: diaryId,
+        author_id: session.user.id,
+        content: text,
+      })
+      .select("id,created_at")
+      .single();
+    if (insertError) {
+      setDiaries((items) =>
+        items.map((item) =>
+          item.id === diaryId ? { ...item, comments: item.comments.filter((note) => note.id !== tempId) } : item,
+        ),
+      );
+      setError(errorMessage(insertError));
+      return;
+    }
+    setDiaries((items) =>
+      items.map((item) =>
+        item.id === diaryId
+          ? {
+              ...item,
+              comments: item.comments.map((note) =>
+                note.id === tempId ? { ...note, id: data.id, createdAt: data.created_at, time: formatNoteTime(data.created_at) } : note,
+              ),
+            }
+          : item,
+      ),
+    );
   }
 
   async function addStamp(diaryId: string, stampType: string) {
     if (!supabase || !activeNotebook || !session?.user) return;
-    const { error: insertError } = await supabase.from("stamps").insert({
-      diary_id: diaryId,
-      author_id: session.user.id,
-      stamp_type: stampType,
-    });
-    if (insertError) setError(errorMessage(insertError));
-    await loadNotebookData(activeNotebook);
+    const tempId = `optimistic-stamp-${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    const authorName = profile?.display_name ?? "我";
+    const authorColor = profile?.color_key ?? null;
+    setDiaries((items) =>
+      items.map((item) =>
+        item.id === diaryId
+          ? {
+              ...item,
+              responses: [...item.responses, { id: tempId, by: authorName, text: stampType, colorKey: authorColor, authorId: session.user.id, createdAt }],
+            }
+          : item,
+      ),
+    );
+    const { data, error: insertError } = await supabase
+      .from("stamps")
+      .insert({
+        diary_id: diaryId,
+        author_id: session.user.id,
+        stamp_type: stampType,
+      })
+      .select("id,created_at")
+      .single();
+    if (insertError) {
+      setDiaries((items) =>
+        items.map((item) =>
+          item.id === diaryId ? { ...item, responses: item.responses.filter((stamp) => stamp.id !== tempId) } : item,
+        ),
+      );
+      setError(errorMessage(insertError));
+      return;
+    }
+    setDiaries((items) =>
+      items.map((item) =>
+        item.id === diaryId
+          ? {
+              ...item,
+              responses: item.responses.map((stamp) => (stamp.id === tempId ? { ...stamp, id: data.id, createdAt: data.created_at } : stamp)),
+            }
+          : item,
+      ),
+    );
   }
 
   async function addHighlight(diaryId: string, start: number, end: number) {
     if (!supabase || !activeNotebook || !session?.user) return;
-    const diary = diaries.find((item) => item.id === diaryId);
-    const merged = mergeHighlights(diary?.highlights ?? [], { id: `h${Date.now()}`, start, end, colorKey: profile?.color_key });
+    const previous = diaries;
+    const tempId = `optimistic-highlight-${Date.now()}`;
+    const diary = previous.find((item) => item.id === diaryId);
+    const merged = mergeHighlights(diary?.highlights ?? [], { id: tempId, start, end, colorKey: profile?.color_key });
     setDiaries((items) => items.map((item) => (item.id === diaryId ? { ...item, highlights: merged } : item)));
 
-    const { error: insertError } = await supabase.from("highlights").insert({
-      diary_id: diaryId,
-      author_id: session.user.id,
-      start_index: start,
-      end_index: end,
-    });
-    if (insertError) setError(errorMessage(insertError));
-    await loadNotebookData(activeNotebook);
+    const { data, error: insertError } = await supabase
+      .from("highlights")
+      .insert({
+        diary_id: diaryId,
+        author_id: session.user.id,
+        start_index: start,
+        end_index: end,
+      })
+      .select("id")
+      .single();
+    if (insertError) {
+      setDiaries(previous);
+      setError(errorMessage(insertError));
+      return;
+    }
+    setDiaries((items) =>
+      items.map((item) =>
+        item.id === diaryId
+          ? { ...item, highlights: item.highlights.map((highlight) => (highlight.id === tempId ? { ...highlight, id: data.id } : highlight)) }
+          : item,
+      ),
+    );
   }
 
   if (!hasSupabaseEnv || !supabase) {
@@ -672,7 +982,7 @@ function App() {
                           author={memberFor(members, diary.authorId)}
                           currentUserId={session.user.id}
                           expanded={openDiaryId === diary.id}
-                          onToggle={() => setOpenDiaryId(openDiaryId === diary.id ? null : diary.id)}
+                          onToggle={() => setOpenDiaryId((current) => (current === diary.id ? null : diary.id))}
                           onPerson={() => {
                             setSelectedPersonId(diary.authorId);
                             setTab("friends");
@@ -727,7 +1037,7 @@ function App() {
                   author={memberFor(members, diary.authorId)}
                   currentUserId={session.user.id}
                   expanded={openDiaryId === diary.id}
-                  onToggle={() => setOpenDiaryId(openDiaryId === diary.id ? null : diary.id)}
+                  onToggle={() => setOpenDiaryId((current) => (current === diary.id ? null : diary.id))}
                   onPerson={() => undefined}
                   onStamp={(text) => addStamp(diary.id, text)}
                   onNote={(text) => addPaperNote(diary.id, text)}
@@ -905,7 +1215,7 @@ function AvatarDoodleEditor({
   );
 }
 
-function DiaryEntry({
+const DiaryEntry = memo(function DiaryEntry({
   diary,
   author,
   currentUserId,
@@ -1135,6 +1445,28 @@ function DiaryEntry({
         </>
       )}
     </article>
+  );
+}, areDiaryEntryPropsEqual);
+
+function areDiaryEntryPropsEqual(
+  previous: {
+    diary: Diary;
+    author: Member;
+    currentUserId: string;
+    expanded: boolean;
+  },
+  next: {
+    diary: Diary;
+    author: Member;
+    currentUserId: string;
+    expanded: boolean;
+  },
+) {
+  return (
+    previous.diary === next.diary &&
+    previous.author === next.author &&
+    previous.currentUserId === next.currentUserId &&
+    previous.expanded === next.expanded
   );
 }
 
